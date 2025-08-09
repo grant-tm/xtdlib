@@ -24,8 +24,6 @@
     #endif
 #endif
 
-void foo (void) {}
-
 static inline u64 AlignForward (u64 ptr, u64 alignment) {
     u64 modulo = ptr % alignment;
     if (modulo != 0) {
@@ -97,7 +95,7 @@ void *_ArenaPush (Arena *arena, u64 size, u64 alignment, b32 clearToZero) {
 
 #define ArenaRelease(arena)                              \
     do {                                                 \
-        ReleaseMemory((arena)->base); \
+        ReleaseMemory((arena)->base);                    \
         (arena)->base = NULL;                            \
         (arena)->used = 0;                               \
         (arena)->committed = 0;                          \
