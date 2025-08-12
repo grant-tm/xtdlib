@@ -117,7 +117,7 @@ Node *last;
 #define _ArrayHeader_ struct { u64 count; u64 capacity; }
 typedef struct ArrayHeader { u64 count; u64 capacity; } ArrayHeader;
 
-#define ArrayHeaderCast(a) ((ArrayHeader *)&(a))
+#define ArrayHeaderCast(a) ((ArrayHeader *)&((a).count))
 #define ArrayItemSize(a)   (sizeof(*(a).v))
 
 void *ArrayGrow (Arena *arena, ArrayHeader *header, void *array, u64 itemSize, u64 count, b32 clearToZero) {
@@ -140,8 +140,12 @@ void *ArrayGrow (Arena *arena, ArrayHeader *header, void *array, u64 itemSize, u
     void *newArray = _ArenaPush(arena, totalNewBytes, alignof(u8), false);
     if (!newArray) return NULL;
 
-    if (array) {
-        memcpy(newArray, array, totalOldBytes);
+    if (array && prevCount > 0) {
+        u8 *src = (u8 *)array;
+        u8 *dst = (u8 *)newArray;
+        for (u64 i = 0; i < totalOldBytes; i++) {
+            dst[i] = src[i];
+        }
     }
 
     if (clearToZero) {
