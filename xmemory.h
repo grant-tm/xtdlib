@@ -40,14 +40,28 @@ void ReleaseMemory(void *ptr) {
     VirtualFree(ptr, 0, MEM_RELEASE);
 }
 
-typedef struct Arena {
+typedef struct {
     u64 reserved;
     u64 committed;
     u64 used;
     void *base;
 } Arena;
 
+b32 ArenaInit(Arena *arena) {
+    if (!arena) return false;
+    
+    arena->base = ReserveMemory(CommitChunkSize);
+    if (!arena->base) return false;
+    
+    arena->reserved  = CommitChunkSize;
+    arena->committed = 0;
+    arena->used      = 0;
+    return true;
+}
+
 b32 ArenaCommitMemory (Arena *arena, u64 size) {
+
+    if (!arena || !arena->base) return false;
 
     u64 commitSize = AlignForward(size, (u64) CommitChunkSize);
     void *commitPtr = (u8 *)arena->base + arena->committed;
@@ -63,7 +77,7 @@ b32 ArenaCommitMemory (Arena *arena, u64 size) {
 }
 
 void *_ArenaPush (Arena *arena, u64 size, u64 alignment, b32 clearToZero) {
-    
+
     u64 currentPtr = (u64) arena->base + arena->used;
     u64 alignedPtr = AlignForward(currentPtr, alignment);
     u64 padding = alignedPtr - currentPtr;
@@ -71,8 +85,9 @@ void *_ArenaPush (Arena *arena, u64 size, u64 alignment, b32 clearToZero) {
 
     if (arena->used + totalSize > arena->committed) {
         b32 newCommitted = ArenaCommitMemory(arena, totalSize);
-        if (!newCommitted)
+        if (!newCommitted) {
             return NULL;
+        }
     }
 
     void *result = (void *)alignedPtr;
