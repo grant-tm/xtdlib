@@ -8,6 +8,7 @@
 #define Max(value1, value2) (value1 >= value2) ? value1 : value2
 #define Min(value1, value2) (value1 <= value2) ? value1 : value2
 #define IsBetween(value, lower, upper) (((lower) <= (value)) && (upper) >= (value))
+#define IsPowerOfTwo(x) ((x != 0) && ((x & (x - 1)) == 0))
 #define Sq(v) ((v) * (v))
 #define Sqrt(v) (sqrt(v)) // TODO
 
