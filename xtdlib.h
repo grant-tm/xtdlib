@@ -8,5 +8,6 @@
 #include "xstring.h"
 #include "xstyle.h"
 #include "xsystem.h"
+#include "xthread.h"
 
 #endif // XTDLIB_H
