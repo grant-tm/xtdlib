@@ -79,11 +79,11 @@ typedef CRITICAL_SECTION Mutex;
 #define AtomicCompEx64(ptr, expected, desired) \
     InterlockedCompareExchange64((volatile i64*)(ptr), (i64)desired, (i64)expected)
 #define AtomicCompExPtr(ptr, expected, desired) \
-    InterlockedCompareExchangePointer((volatile void **)(ptr), (void *)desired, (void *)expected)
+    InterlockedCompareExchangePointer((void * volatile *)(ptr), (void *)desired, (void *)expected)
 
 #define AtomicEx32(ptr, val) InterlockedExchange((volatile i32*)(ptr), (i32)val)
 #define AtomicEx64(ptr, val) InterlockedExchange64((volatile i64*)(ptr), (i64)val)
-#define AtomicExPtr(ptr, val) InterlockedExchangePointer((volatile void **)(ptr), void * val)
+#define AtomicExPtr(ptr, val) InterlockedExchangePointer((void * volatile *)(ptr), (void *) val)
 
 #define AtomicFetchAdd32(ptr, val) InterlockedExchangeAdd((volatile i32*)(ptr), (i32)val)
 #define AtomicFetchAdd64(ptr, val) InterlockedExchangeAdd64((volatile i64*)(ptr), (i64)val)
