@@ -6,6 +6,8 @@
 
 #include "xstyle.h"
 
+#define IgnoreUnused(value) value = value;
+
 #define Assert(condition) \
     ((condition) ? (void) 0 : AssertFail(#condition, NULL, __FILE__, __LINE__))
 
