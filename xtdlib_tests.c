@@ -2519,23 +2519,23 @@ TEST(AtomicMemoryOrdering, "Multithreading", "Atomics") {
 
 // -- Mutex Component ---------------------------------------------------------
 
-TEST(MutexMock, "Mulithreading", "Mutex") {
+TEST(MutexMock, "Multithreading", "Mutex") {
 	return 0;
 }
 
 // -- Thread Component --------------------------------------------------------
 
-TEST(TheadMock, "Mulithreading", "Thread") {
+TEST(TheadMock, "Multithreading", "Thread") {
 	return 0;
 }
 
 // -- Shared Queue Component --------------------------------------------------
 
-TEST(SharedQueueMock, "Mulithreading", "SharedQueue") {
+TEST(SharedQueueMock, "Multithreading", "SharedQueue") {
 	return 0;
 }
 
 int main (void) {
-	test_group_run_tests(xtd_global_test_collector, xtd_global_test_collector_num_tests);
-	return 0;
+	xtd_run_all_tests();
+    return 0;
 }
