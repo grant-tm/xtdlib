@@ -85,224 +85,23 @@ typedef struct TestCase {
 	char **error_details;
 } TestCase;
 
-char *test_result_to_string (TestResult result) { 
-	char *result_string;
-	switch (result) { 
-		case TEST_RESULT_FAIL: 
-			result_string = _strdup("TEST_FAILED");
-		break;
-		case TEST_RESULT_ERROR:
-			result_string = _strdup("ERROR");
-		break;
-		case TEST_RESULT_INCORRECT_VALUE:
-			result_string = _strdup("INCORRECT VALUE");
-		break;
-		case TEST_RESULT_INVALID_STATE:
-			result_string = _strdup("INVALID STATE");
-		break;
-		case TEST_RESULT_OUT_OF_RANGE:
-			result_string = _strdup("OUT OF RANGE");
-		break;
-		case TEST_RESULT_NULL_VALUE:
-			result_string = _strdup("NULL VALUE");
-		break;
-		case TEST_RESULT_RESOURCE_ERROR:
-			result_string = _strdup("RESOURCE ERROR");
-		break;
-		case TEST_NOT_IMPLEMENTED:
-			result_string = _strdup("TEST NOT IMPLEMENTED");
-		break;
-		default:
-			result_string = _strdup("UNKNOWN TEST RESULT");
-		break;
-	}
-	return result_string;
-}
+char *test_result_to_string (TestResult result);
 
-void test_case_record_error (TestCase *test_case, TestResult error_type, const char *message, const char *details, ...) {
-	test_case->num_errors += 1;
-	u32 error_index = test_case->num_errors - 1;
-	
-	// format and save error message	
-	char error_message_buffer[120];
-	char *stringified_result = test_result_to_string(error_type);
-	snprintf(error_message_buffer, 120, "%s - %s", test_result_to_string(error_type), message);
-	free(stringified_result);
+void test_case_record_error (TestCase *test_case, TestResult error_type, const char *message, const char *details, ...);
 
-	test_case->errors = realloc(test_case->errors, sizeof(char *) * test_case->num_errors);
-	test_case->errors[error_index] = _strdup(error_message_buffer);
+void test_case_run_test (TestCase *test_case);
 
-	// format and save error details
-	char error_details_buffer[120];
-	va_list args;
-	va_start(args, details);
-	vsnprintf(error_details_buffer, sizeof(error_details_buffer), details, args);
-	va_end(args);
+void test_group_output_errors (TestCase **test_cases, u32 num_test_cases);
 
-	test_case->error_details = realloc(test_case->error_details, sizeof(char *) * test_case->num_errors);
-	test_case->error_details[error_index] = _strdup(error_details_buffer);
-	
-	return;
-}
-
-void test_case_run_test (TestCase *test_case) {
-	test_case->function();
-	test_case->passed = (test_case->num_errors == 0);
-	return;
-}
-
-void test_group_output_errors (TestCase **test_cases, u32 num_test_cases) {
-	
-    bool all_passed = true;
-	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-        if (test_cases[case_index]->passed == false) {
-            all_passed = false;
-            break;
-        }
-    }
-    if (all_passed) {
-        return;
-    }
-
-    printf("========================= ERRORS ==============================\n");
-	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-		TestCase *test_case = test_cases[case_index];	
-		u32 num_errors = test_case->num_errors;
-		for (u32 error_index = 0; error_index < num_errors; ++error_index) {
-			printf("[%s] %s\n", test_case->name, test_case->errors[error_index]);
-			if (XTD_TEST_LOGGING_VERBOSITY == TEST_LOGGING_VERBOSITY_HIGH) {
-				printf("%s\n", test_case->error_details[error_index]);
-			}
-		}
-	}
-	return;
-}
-
-void test_group_run_tests (TestCase **test_cases, u32 num_test_cases) {
-
-	// collect modules
-	const char *modules[128];
-	u32 num_modules = 0;
-	
-	const char *components[128];
-	u32 num_components = 0;
-
-	// gather modules and components
-	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-		
-		const char *module = test_cases[case_index]->tags[0];
-		const char *component = test_cases[case_index]->tags[1];
-
-		// TODO replace with map
-		// gather modules
-		bool module_is_unique = true;
-		for (u32 module_index = 0; module_index < num_modules; ++module_index) {
-			if (strcmp(modules[module_index], module) == 0) {
-				module_is_unique = false;
-				break;
-			}
-		}
-		if (module_is_unique) {
-			modules[num_modules] = test_cases[case_index]->tags[0];
-			num_modules++;
-		}
-
-		// gather components
-		bool component_is_unique = true;
-		for (u32 component_index = 0; component_index < num_components; ++component_index) {
-			if (strcmp(components[component_index], component) == 0) {
-				component_is_unique = false;
-				break;
-			}
-		}
-		if (component_is_unique) {
-			components[num_components] = test_cases[case_index]->tags[1];
-			num_components++;
-		}
-	}
-	
-	// run all tests
-	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-		test_case_run_test(test_cases[case_index]);
-	}
-
-	// medium / low: print pass/fail per module
-	if (XTD_TEST_LOGGING_VERBOSITY <= TEST_LOGGING_VERBOSITY_MEDIUM) {
-		for (u32 module_index = 0; module_index < num_modules; ++module_index) {
-			printf("[%s]:\t\t", modules[module_index]);
-			for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-				if (strcmp(test_cases[case_index]->tags[0], modules[module_index]) != 0)
-					continue;	
-				if (test_cases[case_index]->passed)
-					printf(".");
-				else
-					printf("F");
-			}
-			printf("\n");
-		}
-	}	
-	// high: print pass/fail per component per module
-	else if (XTD_TEST_LOGGING_VERBOSITY == TEST_LOGGING_VERBOSITY_HIGH) {
-		for (u32 module_index = 0; module_index < num_modules; ++module_index) {
-			printf("[%s]:\n", modules[module_index]);
-			for (u32 component_index = 0; component_index < num_components; ++component_index) {
-				bool component_in_module = false;
-				for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-					if (strcmp(test_cases[case_index]->tags[0], modules[module_index]) == 0 &&
-						strcmp(test_cases[case_index]->tags[1], components[component_index]) == 0) {
-						component_in_module = true;
-					}
-				}
-				if (!component_in_module) {
-					continue;
-				}
-
-				printf("  -- %s:\t", components[component_index]);
-                if (strlen(components[component_index]) < 8) {
-                	printf("\t");
-                }
-
-				for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
-					if (strcmp(test_cases[case_index]->tags[0], modules[module_index]) != 0)
-						continue;
-					if (strcmp(test_cases[case_index]->tags[1], components[component_index]) != 0)
-						continue;
-					if (test_cases[case_index]->passed)
-						printf(".");
-					else
-						printf("F");
-				}
-				printf("\n");
-			}
-		}
-	}
-
-	if (XTD_TEST_LOGGING_VERBOSITY >= TEST_LOGGING_VERBOSITY_MEDIUM) {
-		test_group_output_errors(test_cases, num_test_cases);
-	}
-
-	// collect components
-
-
-	return;
-}
+void test_group_run_tests (TestCase **test_cases, u32 num_test_cases);
 
 static TestCase **xtd_global_test_collector = NULL;
 static unsigned xtd_global_test_collector_num_tests = 0;
 static unsigned xtd_global_test_collector_capacity = 0;
 
-void xtd_run_all_tests (void) {
-	test_group_run_tests(xtd_global_test_collector, xtd_global_test_collector_num_tests);
-}
+void xtd_run_all_tests (void);
 
-static void register_test(TestCase *test) {
-    if (test == NULL) return;
-	if (xtd_global_test_collector_num_tests >= xtd_global_test_collector_capacity) {
-        xtd_global_test_collector_capacity = xtd_global_test_collector_capacity ? xtd_global_test_collector_capacity * 2 : 16;
-        xtd_global_test_collector = realloc(xtd_global_test_collector, sizeof(TestCase*) * xtd_global_test_collector_capacity);
-    }
-	xtd_global_test_collector[xtd_global_test_collector_num_tests++] = test;
-}
+static void register_test(TestCase *test);
 
 #if defined(_MSC_VER)
     #pragma section(".CRT$XCU",read)
@@ -870,6 +669,222 @@ bool MPMCQueuePop (SharedQueue *q, void *data, u64 size);
 #endif // XTDLIB_H
 #ifdef XTDLIB_IMPLEMENTATION
 ///////////////////////////////////////////////////////////////////////////////
+
+//=============================================================================
+// TESTING IMPLEMENTATION
+//=============================================================================
+
+char *test_result_to_string (TestResult result) { 
+	char *result_string;
+	switch (result) { 
+		case TEST_RESULT_FAIL: 
+			result_string = _strdup("TEST_FAILED");
+		break;
+		case TEST_RESULT_ERROR:
+			result_string = _strdup("ERROR");
+		break;
+		case TEST_RESULT_INCORRECT_VALUE:
+			result_string = _strdup("INCORRECT VALUE");
+		break;
+		case TEST_RESULT_INVALID_STATE:
+			result_string = _strdup("INVALID STATE");
+		break;
+		case TEST_RESULT_OUT_OF_RANGE:
+			result_string = _strdup("OUT OF RANGE");
+		break;
+		case TEST_RESULT_NULL_VALUE:
+			result_string = _strdup("NULL VALUE");
+		break;
+		case TEST_RESULT_RESOURCE_ERROR:
+			result_string = _strdup("RESOURCE ERROR");
+		break;
+		case TEST_NOT_IMPLEMENTED:
+			result_string = _strdup("TEST NOT IMPLEMENTED");
+		break;
+		default:
+			result_string = _strdup("UNKNOWN TEST RESULT");
+		break;
+	}
+	return result_string;
+}
+
+void test_case_record_error (TestCase *test_case, TestResult error_type, const char *message, const char *details, ...) {
+	test_case->num_errors += 1;
+	u32 error_index = test_case->num_errors - 1;
+	
+	// format and save error message	
+	char error_message_buffer[120];
+	char *stringified_result = test_result_to_string(error_type);
+	snprintf(error_message_buffer, 120, "%s - %s", test_result_to_string(error_type), message);
+	free(stringified_result);
+
+	test_case->errors = realloc(test_case->errors, sizeof(char *) * test_case->num_errors);
+	test_case->errors[error_index] = _strdup(error_message_buffer);
+
+	// format and save error details
+	char error_details_buffer[120];
+	va_list args;
+	va_start(args, details);
+	vsnprintf(error_details_buffer, sizeof(error_details_buffer), details, args);
+	va_end(args);
+
+	test_case->error_details = realloc(test_case->error_details, sizeof(char *) * test_case->num_errors);
+	test_case->error_details[error_index] = _strdup(error_details_buffer);
+	
+	return;
+}
+
+void test_case_run_test (TestCase *test_case) {
+	test_case->function();
+	test_case->passed = (test_case->num_errors == 0);
+	return;
+}
+
+void test_group_output_errors (TestCase **test_cases, u32 num_test_cases) {
+	
+    bool all_passed = true;
+	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+        if (test_cases[case_index]->passed == false) {
+            all_passed = false;
+            break;
+        }
+    }
+    if (all_passed) {
+        return;
+    }
+
+    printf("========================= ERRORS ==============================\n");
+	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+		TestCase *test_case = test_cases[case_index];	
+		u32 num_errors = test_case->num_errors;
+		for (u32 error_index = 0; error_index < num_errors; ++error_index) {
+			printf("[%s] %s\n", test_case->name, test_case->errors[error_index]);
+			if (XTD_TEST_LOGGING_VERBOSITY == TEST_LOGGING_VERBOSITY_HIGH) {
+				printf("%s\n", test_case->error_details[error_index]);
+			}
+		}
+	}
+	return;
+}
+
+void test_group_run_tests (TestCase **test_cases, u32 num_test_cases) {
+
+	// collect modules
+	const char *modules[128];
+	u32 num_modules = 0;
+	
+	const char *components[128];
+	u32 num_components = 0;
+
+	// gather modules and components
+	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+		
+		const char *module = test_cases[case_index]->tags[0];
+		const char *component = test_cases[case_index]->tags[1];
+
+		// TODO replace with map
+		// gather modules
+		bool module_is_unique = true;
+		for (u32 module_index = 0; module_index < num_modules; ++module_index) {
+			if (strcmp(modules[module_index], module) == 0) {
+				module_is_unique = false;
+				break;
+			}
+		}
+		if (module_is_unique) {
+			modules[num_modules] = test_cases[case_index]->tags[0];
+			num_modules++;
+		}
+
+		// gather components
+		bool component_is_unique = true;
+		for (u32 component_index = 0; component_index < num_components; ++component_index) {
+			if (strcmp(components[component_index], component) == 0) {
+				component_is_unique = false;
+				break;
+			}
+		}
+		if (component_is_unique) {
+			components[num_components] = test_cases[case_index]->tags[1];
+			num_components++;
+		}
+	}
+	
+	// run all tests
+	for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+		test_case_run_test(test_cases[case_index]);
+	}
+
+	// medium / low: print pass/fail per module
+	if (XTD_TEST_LOGGING_VERBOSITY <= TEST_LOGGING_VERBOSITY_MEDIUM) {
+		for (u32 module_index = 0; module_index < num_modules; ++module_index) {
+			printf("[%s]:\t\t", modules[module_index]);
+			for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+				if (strcmp(test_cases[case_index]->tags[0], modules[module_index]) != 0)
+					continue;	
+				if (test_cases[case_index]->passed)
+					printf(".");
+				else
+					printf("F");
+			}
+			printf("\n");
+		}
+	}	
+	// high: print pass/fail per component per module
+	else if (XTD_TEST_LOGGING_VERBOSITY == TEST_LOGGING_VERBOSITY_HIGH) {
+		for (u32 module_index = 0; module_index < num_modules; ++module_index) {
+			printf("[%s]:\n", modules[module_index]);
+			for (u32 component_index = 0; component_index < num_components; ++component_index) {
+				bool component_in_module = false;
+				for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+					if (strcmp(test_cases[case_index]->tags[0], modules[module_index]) == 0 &&
+						strcmp(test_cases[case_index]->tags[1], components[component_index]) == 0) {
+						component_in_module = true;
+					}
+				}
+				if (!component_in_module) {
+					continue;
+				}
+
+				printf("  -- %s:\t", components[component_index]);
+                if (strlen(components[component_index]) < 8) {
+                	printf("\t");
+                }
+
+				for (u32 case_index = 0; case_index < num_test_cases; ++case_index) {
+					if (strcmp(test_cases[case_index]->tags[0], modules[module_index]) != 0)
+						continue;
+					if (strcmp(test_cases[case_index]->tags[1], components[component_index]) != 0)
+						continue;
+					if (test_cases[case_index]->passed)
+						printf(".");
+					else
+						printf("F");
+				}
+				printf("\n");
+			}
+		}
+	}
+
+	if (XTD_TEST_LOGGING_VERBOSITY >= TEST_LOGGING_VERBOSITY_MEDIUM) {
+		test_group_output_errors(test_cases, num_test_cases);
+	}
+
+	return;
+}
+
+void xtd_run_all_tests (void) {
+	test_group_run_tests(xtd_global_test_collector, xtd_global_test_collector_num_tests);
+}
+
+static void register_test(TestCase *test) {
+    if (test == NULL) return;
+	if (xtd_global_test_collector_num_tests >= xtd_global_test_collector_capacity) {
+        xtd_global_test_collector_capacity = xtd_global_test_collector_capacity ? xtd_global_test_collector_capacity * 2 : 16;
+        xtd_global_test_collector = realloc(xtd_global_test_collector, sizeof(TestCase*) * xtd_global_test_collector_capacity);
+    }
+	xtd_global_test_collector[xtd_global_test_collector_num_tests++] = test;
+}
 
 //=============================================================================
 // MEMORY IMPLEMENTATION
