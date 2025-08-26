@@ -291,6 +291,10 @@ static TestCase **xtd_global_test_collector = NULL;
 static unsigned xtd_global_test_collector_num_tests = 0;
 static unsigned xtd_global_test_collector_capacity = 0;
 
+void xtd_run_all_tests (void) {
+	test_group_run_tests(xtd_global_test_collector, xtd_global_test_collector_num_tests);
+}
+
 static void register_test(TestCase *test) {
     if (test == NULL) return;
 	if (xtd_global_test_collector_num_tests >= xtd_global_test_collector_capacity) {
