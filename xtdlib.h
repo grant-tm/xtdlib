@@ -627,7 +627,7 @@ typedef struct {
     volatile u64 tail;
 } SharedQueue;
 
-static inline bool SPSCQueueInit(SharedQueue *q, u64 capacity_bytes) {
+static inline bool SPSCQueueInit (SharedQueue *q, u64 capacity_bytes) {
     if (!xtd_is_power_of_two(capacity_bytes)) { 
 		return false; 
 	}
@@ -642,7 +642,7 @@ static inline bool SPSCQueueInit(SharedQueue *q, u64 capacity_bytes) {
     return true;
 }
 
-static inline void QueueDestroy(SharedQueue *q) {
+static inline void QueueDestroy (SharedQueue *q) {
     free(q->buffer);
     q->buffer = NULL;
     q->capacity = 0;
@@ -666,8 +666,12 @@ bool MPMCQueuePush (SharedQueue *q, const void *data, u64 size);
 bool MPMCQueuePop (SharedQueue *q, void *data, u64 size);
 
 ///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 #endif // XTDLIB_H
 #ifdef XTDLIB_IMPLEMENTATION
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
 //=============================================================================
@@ -892,7 +896,7 @@ static void register_test(TestCase *test) {
 
 // -- Arena -------------------------------------------------------------------
 
-b32 _arena_init(Arena *arena) {
+b32 _arena_init (Arena *arena) {
     
     xtd_assert_message(arena != NULL, "[_arena_init]: Cannot initialize NULL arena\n");
     if (!arena) return false;
@@ -1000,7 +1004,7 @@ void *array_grow (Arena *arena, ArrayHeader *header, void *array, u64 item_size,
     return new_array;
 }
 
-void array_shift_right(ArrayHeader *header, void *array, u64 item_size, u64 from_index, u64 n) {
+void array_shift_right (ArrayHeader *header, void *array, u64 item_size, u64 from_index, u64 n) {
     u64 count = header->count;
     if (!array || from_index > count) return;  // > instead of >= so inserting at end works
 
@@ -1014,7 +1018,7 @@ void array_shift_right(ArrayHeader *header, void *array, u64 item_size, u64 from
     }
 }
 
-void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_index, u64 n) {
+void array_shift_left (ArrayHeader *header, void *array, u64 item_size, u64 from_index, u64 n) {
     u64 count = header->count;
     if (!array || from_index >= count) return;
 
