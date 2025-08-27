@@ -49,7 +49,7 @@ typedef enum TestLoggingVerbosity {
 	TEST_LOGGING_VERBOSITY_LOW = 0,
 	TEST_LOGGING_VERBOSITY_MEDIUM,
 	TEST_LOGGING_VERBOSITY_HIGH,
-	NUM_TEST_LOGGGING_VERBOSITY_OPTIONS
+	NUM_TEST_LOGGING_VERBOSITY_OPTIONS
 } TestLoggingVerbosity;
 
 #ifndef XTD_TEST_LOGGING_VERBOSITY
@@ -101,7 +101,14 @@ static unsigned xtd_global_test_collector_capacity = 0;
 
 void xtd_run_all_tests (void);
 
-static void register_test(TestCase *test);
+static inline void register_test(TestCase *test) {
+    if (test == NULL) return;
+	if (xtd_global_test_collector_num_tests >= xtd_global_test_collector_capacity) {
+        xtd_global_test_collector_capacity = xtd_global_test_collector_capacity ? xtd_global_test_collector_capacity * 2 : 16;
+        xtd_global_test_collector = realloc(xtd_global_test_collector, sizeof(TestCase*) * xtd_global_test_collector_capacity);
+    }
+	xtd_global_test_collector[xtd_global_test_collector_num_tests++] = test;
+}
 
 #if defined(_MSC_VER)
     #pragma section(".CRT$XCU",read)
@@ -879,15 +886,6 @@ void test_group_run_tests (TestCase **test_cases, u32 num_test_cases) {
 
 void xtd_run_all_tests (void) {
 	test_group_run_tests(xtd_global_test_collector, xtd_global_test_collector_num_tests);
-}
-
-static void register_test(TestCase *test) {
-    if (test == NULL) return;
-	if (xtd_global_test_collector_num_tests >= xtd_global_test_collector_capacity) {
-        xtd_global_test_collector_capacity = xtd_global_test_collector_capacity ? xtd_global_test_collector_capacity * 2 : 16;
-        xtd_global_test_collector = realloc(xtd_global_test_collector, sizeof(TestCase*) * xtd_global_test_collector_capacity);
-    }
-	xtd_global_test_collector[xtd_global_test_collector_num_tests++] = test;
 }
 
 //=============================================================================
