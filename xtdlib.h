@@ -416,6 +416,9 @@ void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_
 #define xtd_max(value1, value2) (value1 >= value2) ? value1 : value2
 #define xtd_min(value1, value2) (value1 <= value2) ? value1 : value2
 #define xtd_is_between(value, lower, upper) (((lower) <= (value)) && (upper) >= (value))
+#define xtd_is_within_margin(value, target, margin) (\
+		(xtd_is_between((value), ((target) - (margin)), ((target) + (margin)))) && \
+		(xtd_is_between((value), ((target) - (margin)), ((target) + (margin)))))
 #define xtd_is_power_of_two(x) ((x != 0) && ((x & (x - 1)) == 0))
 #define xtd_sq(v) ((v) * (v))
 #define xtd_sqrt(v) (sqrt(v)) // TODO: remove math.h and make custom sqrt
