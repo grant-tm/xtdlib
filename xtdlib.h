@@ -35,6 +35,7 @@ typedef int8_t  b8;
 typedef int16_t b16;
 typedef int32_t b32;
 typedef int64_t b64;
+typedef unsigned char byte;
 
 typedef float   f32;
 typedef double  f64;
@@ -155,9 +156,8 @@ xtd_exit(int code) {
 #endif
 
 static inline void 
-xtd_assert_fail (const char *condition, const char *message, const char *file, u32 line) {
-    
-        fprintf(stderr, "\nAssertion failed: (%s), file %s, line %d\n", condition, file, line);
+xtd_assert_fail (const char *condition, const char *message, const char *file, u32 line) { 
+    fprintf(stderr, "\nAssertion failed: (%s), file %s, line %d\n", condition, file, line);
     if (message) { 
         fprintf(stderr, "\t -- %s", message); 
     }
@@ -167,16 +167,12 @@ xtd_assert_fail (const char *condition, const char *message, const char *file, u
 #define xtd_ignore_unused(x) (void)(x)
 
 //=============================================================================
-// TESTING DECLARATIONS
-//=============================================================================
-
-//=============================================================================
 // MEMORY DECLARATIONS
 //=============================================================================
 
 // -- Memory Management -------------------------------------------------------
 
-static inline void *xtd_reserve_memory(u64 size) {
+static inline void *xtd_reserve_memory (u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         return VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_READWRITE);
     #else
@@ -185,7 +181,7 @@ static inline void *xtd_reserve_memory(u64 size) {
     #endif
 }
 
-static inline void *xtd_commit_reserved_memory(void *addr, u64 size) {
+static inline void *xtd_commit_reserved_memory (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         return VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
     #else
@@ -194,7 +190,7 @@ static inline void *xtd_commit_reserved_memory(void *addr, u64 size) {
     #endif
 }
 
-static inline void xtd_release_memory(void *addr, u64 size) {
+static inline void xtd_release_memory (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         xtd_ignore_unused(size);
         VirtualFree(addr, 0, MEM_RELEASE);
@@ -203,7 +199,7 @@ static inline void xtd_release_memory(void *addr, u64 size) {
     #endif
 }
 
-static inline void xtd_zero_memory(void *addr, u64 size) {
+static inline void xtd_zero_memory (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         ZeroMemory(addr, size);
     #elif defined(__unix__) || defined(__APPLE__)
@@ -211,6 +207,14 @@ static inline void xtd_zero_memory(void *addr, u64 size) {
     #else
         memset(addr, 0, size);
     #endif
+}
+
+static inline void xtd_copy_memory (void *dest, void *source, u64 size) {
+	memcpy(dest, source, size);
+}
+
+static inline i32 xtd_compare_memory (void *addr_a, void *addr_b, u64 size) {
+    return size == 0 ? 0 : memcmp(addr_a, addr_b, size);
 }
 
 // -- Alignment ---------------------------------------------------------------
@@ -409,19 +413,518 @@ void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_
 // STRING DECLARATIONS
 //=============================================================================
 
+typedef struct {
+    char *value;
+    u64 length;
+} String;
+
+// -- string copy -------------------------------
+
+static inline String string_arena_copy (Arena *arena, String s) {
+    char *copy = arena_push_array(arena, s.length, char);
+    if (!copy) {
+		return (String){0}; // alloc failed return empty string
+	}
+	xtd_copy_memory(copy, s.value, s.length);
+    return (String){ copy, s.length };
+}
+
+static inline String string_malloc_copy (String s) {
+    char *copy = malloc(s.length);
+    if (!copy) return (String){0}; // failure
+    xtd_copy_memory(copy, s.value, s.length);
+    return (String){ copy, s.length };
+}
+
+static inline void string_free (String s) {
+    free(s.value);
+}
+
+// -- string slice ------------------------------
+
+static inline String string_slice (String s, u64 start, u64 end) {
+    if (start > s.length) { start = s.length; }
+    if (end > s.length) { end = s.length; }
+    if (end < start) { end = start; }
+    return (String){ s.value + start, end - start };
+}
+
+static inline String string_arena_copy_slice (Arena *arena, String s, u64 start, u64 end) {
+    String slice = string_slice(s, start, end);
+    char *copy = arena_push(arena, slice.length);
+    if (!copy || slice.length == 0) {
+		return (String){ NULL, 0 };
+	}
+	memcpy(copy, slice.value, slice.length);
+    return (String){ copy, slice.length };
+}
+
+static inline String string_malloc_copy_slice (String s, u64 start, u64 end) {
+    String slice = string_slice(s, start, end);
+    char *copy = malloc(slice.length);
+    if (!copy || slice.length == 0) {
+        return (String){ NULL, 0 };
+    }
+    memcpy(copy, slice.value, slice.length);
+    return (String){ copy, slice.length };
+}
+
+static inline bool string_memory_is_equal (String a, String b) {	
+    if (a.length != b.length) {
+		return false;
+	}
+    return xtd_compare_memory(a.value, b.value, a.length) == 0;
+}
+
+// -- BUILDER -----------------------------------------------------------------
+
+typedef struct StringBuilder {
+    String buffer;
+    u64 capacity;
+} StringBuilder;
+
+#define StrBuild(arena, builder, x) _Generic((x), \
+    WString:  StrBuildWStr,     \
+    wchar:    StrBuildWChar,    \
+    wchar *:  StrBuildCWStr,    \
+    String:   StrBuildStr,      \
+    char:     StrBuildChar,     \
+    i32:      StrBuildI32,      \
+    u32:      StrBuildU32,      \
+    u64:      StrBuildU64,      \
+    f32:      StrBuildF32       \
+    default:  StrBuildCStr)(arena, builder, x)
+
+
+#define string_construct(s) ((String){ (char *)(s), strlen(s) })
+
+static inline void string_builder_arena_reserve (Arena *arena, StringBuilder *sb, u64 new_capacity) {
+    if (sb->capacity >= new_capacity) return;
+
+    char *new_data = arena_push(arena, new_capacity);
+    if (!new_data) return;     
+
+    if (sb->buffer.length > 0) {
+        xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+    }
+
+    sb->buffer.value = new_data;
+    sb->capacity = new_capacity;
+}
+
+static inline void string_builder_reserve (StringBuilder *sb, u64 new_capacity) {
+    if (sb->capacity >= new_capacity) return;
+
+    char *new_data = realloc(sb->buffer.value, new_capacity);
+    if (!new_data) return;
+
+	sb->buffer.value = new_data;
+    sb->capacity = new_capacity;
+}
+
+static inline void string_builder_clear(StringBuilder *sb) {
+    sb->buffer.length = 0;
+}
+
+static inline void string_build_arena_format(Arena *arena, StringBuilder *sb, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    // measure required length
+    va_list args_copy;
+    va_copy(args_copy, args);
+    i32 formatted_length = vsnprintf(NULL, 0, format, args_copy);
+    va_end(args_copy);
+    if (formatted_length < 0) { 
+		va_end(args); 
+		return;
+	}
+
+    // adjust buffer capacity
+    u64 required_memory = sb->buffer.length + (u64) formatted_length;
+    if (required_memory > sb->capacity) {
+        u64 new_capacity = required_memory * 2;
+        char *new_data = arena_push(arena, new_capacity);
+        xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        if (!new_data) {
+			va_end(args);
+			return;
+		}
+		if (sb->buffer.length > 0) {
+            xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        }
+		sb->buffer.value = new_data;
+        sb->capacity = new_capacity;
+    }
+
+    // write formatted string into buffer tail
+    i32 written = vsnprintf(sb->buffer.value + sb->buffer.length, sb->capacity - sb->buffer.length + 1, format, args);
+    if (written > 0) {
+		sb->buffer.length += (u64) formatted_length;
+	}
+
+    va_end(args);
+}
+
+static inline void string_build_malloc_format(StringBuilder *sb, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    // measure required length
+    va_list args_copy;
+    va_copy(args_copy, args);
+    i32 formatted_length = vsnprintf(NULL, 0, format, args_copy);
+    va_end(args_copy);
+    if (formatted_length < 0) { 
+		va_end(args); 
+		return;
+	}
+
+    // adjust buffer capacity
+    u64 required_memory = sb->buffer.length + (u64) formatted_length;
+    if (required_memory > sb->capacity) {
+        u64 new_capacity = required_memory * 2;
+        char *new_data = realloc(sb->buffer.value, new_capacity);
+        xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        if (!new_data) {
+			va_end(args);
+			return;
+		}
+		if (sb->buffer.length > 0) {
+            xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        }
+		sb->buffer.value = new_data;
+        sb->capacity = new_capacity;
+    }
+
+    // write formatted string into buffer tail
+    i32 written = vsnprintf(sb->buffer.value + sb->buffer.length, sb->capacity - sb->buffer.length + 1, format, args);
+    if (written > 0) {
+		sb->buffer.length += (u64) formatted_length;
+	}
+
+    va_end(args);
+}
+
+// -- string conversion -------------------------------------------------------
+
+typedef struct {
+    u32 codepoint;   // Unicode scalar value
+    u8  size;        // number of bytes in this codepoint
+    u64 index;       // byte offset into the String
+} UTF8Iterator;
+
+// Decode next UTF-8 codepoint starting at s->value[*i].
+// Advances *i by the codepoint length in bytes.
+// Returns 0xFFFD (replacement char) on invalid UTF-8.
+static inline UTF8Iterator utf8_next (String s, u64 *i) {
+    UTF8Iterator it = { .codepoint = 0xFFFD, .index = *i, .size = 1 };
+    if (*i >= s.length) {
+        it.codepoint = 0; // signal end
+        return it;
+    }
+
+    const byte *bytes = (const byte *) s.value + *i;
+    byte b0 = bytes[0];
+
+	// 1-byte: ASCII fast path
+    if (b0 < 0x80) {
+        it.codepoint = b0;
+        it.size = 1;
+    } 
+    // 2-byte sequence
+	else if ((b0 >> 5) == 0x6 && *i + 1 < s.length) {
+        byte b1 = bytes[1];
+        if ((b1 & 0xC0) == 0x80) {
+            it.codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+            it.size = 2;
+        }
+    } 
+    // 3-byte sequence
+	else if ((b0 >> 4) == 0xE && *i + 2 < s.length) {
+        byte b1 = bytes[1], b2 = bytes[2];
+        if (((b1 & 0xC0) == 0x80) && ((b2 & 0xC0) == 0x80)) {
+            it.codepoint = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+            it.size = 3;
+        }
+    } 
+    // 4-byte sequence
+	else if ((b0 >> 3) == 0x1E && *i + 3 < s.length) {
+        byte b1 = bytes[1], b2 = bytes[2], b3 = bytes[3];
+        if (((b1 & 0xC0) == 0x80) && ((b2 & 0xC0) == 0x80) && ((b3 & 0xC0) == 0x80)) {
+            it.codepoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+            it.size = 4;
+        }
+    }
+
+    *i += it.size;
+    return it;
+}
+
+// Decode previous UTF-8 codepoint starting at s->value[*i].
+// Moves *i backwards to the start of the previous codepoint.
+// Returns 0xFFFD on invalid UTF-8, 0 if at start.
+static inline UTF8Iterator utf8_prev(String s, u64 *i) {
+    UTF8Iterator it = { .codepoint = 0xFFFD, .index = *i, .size = 1 };
+
+    if (*i == 0) {
+        it.codepoint = 0;
+        it.size = 0;
+        return it;
+    }
+
+    u64 pos = *i - 1;
+    const byte *bytes = (const byte *) s.value;
+
+    // Move backwards until finding a non-continuation byte
+    u8 continuation_bytes = 0;
+    while (pos > 0 && (bytes[pos] & 0xC0) == 0x80) {
+        pos--;
+        continuation_bytes++;
+        if (continuation_bytes > 3) {
+			break; // invalid UTF-8 max 4 bytes
+    	}
+	}
+
+    byte b0 = bytes[pos];
+
+    // Determine length from leading byte
+    if ((b0 & 0x80) == 0) {       // 1-byte ASCII
+        it.size = 1;
+        it.codepoint = b0;
+    }
+	// 2-byte sequence
+	else if ((b0 & 0xE0) == 0xC0 && continuation_bytes == 1) {
+        it.size = 2;
+        if (pos + 1 < s.length) {
+            byte b1 = bytes[pos + 1];
+            if ((b1 & 0xC0) == 0x80)
+                it.codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+        }
+    }
+	// 3-byte sequence
+	else if ((b0 & 0xF0) == 0xE0 && continuation_bytes == 2) {
+        it.size = 3;
+        if (pos + 2 < s.length) {
+            byte b1 = bytes[pos + 1];
+            byte b2 = bytes[pos + 2];
+            if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80)
+                it.codepoint = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+        }
+    }
+	// 4-byte sequence
+	else if ((b0 & 0xF8) == 0xF0 && continuation_bytes == 3) {
+        it.size = 4;
+        if (pos + 3 < s.length) {
+            byte b1 = bytes[pos + 1];
+            byte b2 = bytes[pos + 2];
+            byte b3 = bytes[pos + 3];
+            if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80)
+                it.codepoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+        }
+    }
+
+    it.index = pos;
+    *i = pos;
+    return it;
+}
+
+static inline char *string_to_cstr_malloc (String s) {
+    char *buf = malloc(s.length + 1);
+    if (!buf) {
+		return NULL;
+	}
+
+    memcpy(buf, s.value, s.length);
+    buf[s.length] = '\0';
+    
+	return buf;
+}
+
+static inline char *string_to_cstr_arena (Arena *arena, String s) {
+	char *buf = arena_push(arena, s.length + 1);
+	if (!buf) {
+		return NULL;
+	}
+
+	memcpy(buf, s.value, s.length);
+	buf[s.length] = '\0';
+
+	return buf;
+}
+
+static inline void string_utf8_to_wchar_arena (Arena *arena, String s, StringBuilder *sb) {
+    // worst case: each UTF-8 byte becomes one wchar
+    u64 max_wchars = s.length;  
+    wchar *buffer = arena_push(arena, max_wchars * sizeof(wchar));
+    if (!buffer) return;
+
+    u64 i = 0;
+    u64 out_len = 0;
+    while (i < s.length) {
+        UTF8Iterator it = utf8_next(s, &i);
+        if (it.codepoint == 0) break; // end or invalid
+
+        // Encode to wchar depending on platform
+#if WCHAR_MAX == 0x7FFFFFFF || WCHAR_MAX == 0xFFFFFFFF
+        // 32-bit wchar → direct store
+        buffer[out_len++] = (wchar) it.codepoint;
+
+#elif WCHAR_MAX == 0xFFFF
+        // 16-bit wchar → may need surrogate pairs
+        if (it.codepoint <= 0xFFFF) {
+            buffer[out_len++] = (wchar) it.codepoint;
+        } else {
+            u32 cp = it.codepoint - 0x10000;
+            buffer[out_len++] = (wchar) (0xD800 | (cp >> 10));
+            buffer[out_len++] = (wchar) (0xDC00 | (cp & 0x3FF));
+        }
+#else
+#   error "Unsupported wchar size"
+#endif
+    }
+
+    // update builder
+    sb->buffer.value = (char*) buffer;  // store as bytes
+    sb->buffer.length = out_len * sizeof(wchar);
+    sb->capacity = max_wchars * sizeof(wchar);
+}
+
+static inline void string_utf8_to_wchar_malloc (String s, StringBuilder *sb) {
+    // worst case: each UTF-8 byte becomes one wchar
+    u64 max_wchars = s.length;  
+    wchar *buffer = malloc(max_wchars * sizeof(wchar_t));
+    if (!buffer) return;
+
+    u64 i = 0;
+    u64 out_len = 0;
+    while (i < s.length) {
+        UTF8Iterator it = utf8_next(s, &i);
+        if (it.codepoint == 0) break; // end or invalid
+
+        // Encode to wchar depending on platform
+#if WCHAR_MAX == 0x7FFFFFFF || WCHAR_MAX == 0xFFFFFFFF
+        // 32-bit wchar direct store
+        buffer[out_len++] = (wchar) it.codepoint;
+
+#elif WCHAR_MAX == 0xFFFF
+        // 16-bit wchar may need surrogate pairs
+        if (it.codepoint <= 0xFFFF) {
+            buffer[out_len++] = (wchar) it.codepoint;
+        } else {
+            u32 cp = it.codepoint - 0x10000;
+            buffer[out_len++] = (wchar) (0xD800 | (cp >> 10));
+            buffer[out_len++] = (wchar) (0xDC00 | (cp & 0x3FF));
+        }
+#else
+#   error "Unsupported wchar size"
+#endif
+    }
+
+    // update builder
+    sb->buffer.value = (char*) buffer;  // store as bytes
+    sb->buffer.length = out_len * sizeof(wchar);
+    sb->capacity = max_wchars * sizeof(wchar);
+}
+
+
+static inline String string_from_wchar_arena (Arena *arena, const wchar *input, u64 length) {
+    // worst case: 4 bytes per wchar
+    char *buf = arena_push(arena, length * 4);
+    if (!buf) return (String){0};
+
+    u64 pos = 0;
+    for (u64 i = 0; i < length; i++) {
+        u32 cp = input[i];
+#if WCHAR_MAX == 0xFFFF
+        // handle surrogate pairs
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < length) {
+            u32 low = input[i+1];
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                cp = ((cp - 0xD800) << 10) + (low - 0xDC00) + 0x10000;
+                i++;
+            }
+        }
+#endif
+        if (cp <= 0x7F) buf[pos++] = (char)cp;
+        else if (cp <= 0x7FF) {
+            buf[pos++] = 0xC0 | ((cp >> 6) & 0x1F);
+            buf[pos++] = 0x80 | (cp & 0x3F);
+        } else if (cp <= 0xFFFF) {
+            buf[pos++] = 0xE0 | ((cp >> 12) & 0x0F);
+            buf[pos++] = 0x80 | ((cp >> 6) & 0x3F);
+            buf[pos++] = 0x80 | (cp & 0x3F);
+        } else {
+            buf[pos++] = 0xF0 | ((cp >> 18) & 0x07);
+            buf[pos++] = 0x80 | ((cp >> 12) & 0x3F);
+            buf[pos++] = 0x80 | ((cp >> 6) & 0x3F);
+            buf[pos++] = 0x80 | (cp & 0x3F);
+        }
+    }
+
+    return (String){buf, pos};
+}
+
+static inline String string_from_wchar_malloc (const wchar *input, u64 length) {
+    // worst case: 4 bytes per wchar
+    char *buf = malloc(length * 4);
+    if (!buf) return (String){0};
+
+    u64 pos = 0;
+    for (u64 i = 0; i < length; i++) {
+        u32 cp = input[i];
+#if WCHAR_MAX == 0xFFFF
+        // handle surrogate pairs
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < length) {
+            u32 low = input[i+1];
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                cp = ((cp - 0xD800) << 10) + (low - 0xDC00) + 0x10000;
+                i++;
+            }
+        }
+#endif
+        if (cp <= 0x7F) buf[pos++] = (char)cp;
+        else if (cp <= 0x7FF) {
+            buf[pos++] = 0xC0 | ((cp >> 6) & 0x1F);
+            buf[pos++] = 0x80 | (cp & 0x3F);
+        } else if (cp <= 0xFFFF) {
+            buf[pos++] = 0xE0 | ((cp >> 12) & 0x0F);
+            buf[pos++] = 0x80 | ((cp >> 6) & 0x3F);
+            buf[pos++] = 0x80 | (cp & 0x3F);
+        } else {
+            buf[pos++] = 0xF0 | ((cp >> 18) & 0x07);
+            buf[pos++] = 0x80 | ((cp >> 12) & 0x3F);
+            buf[pos++] = 0x80 | ((cp >> 6) & 0x3F);
+            buf[pos++] = 0x80 | (cp & 0x3F);
+        }
+    }
+
+    return (String){buf, pos};
+}
+
 //=============================================================================
 // MATH DECLARATIONS
 //=============================================================================
 
 #define xtd_max(value1, value2) (value1 >= value2) ? value1 : value2
 #define xtd_min(value1, value2) (value1 <= value2) ? value1 : value2
+
 #define xtd_is_between(value, lower, upper) (((lower) <= (value)) && (upper) >= (value))
 #define xtd_is_within_margin(value, target, margin) (\
 		(xtd_is_between((value), ((target) - (margin)), ((target) + (margin)))) && \
 		(xtd_is_between((value), ((target) - (margin)), ((target) + (margin)))))
+
 #define xtd_is_power_of_two(x) ((x != 0) && ((x & (x - 1)) == 0))
+
 #define xtd_sq(v) ((v) * (v))
 #define xtd_sqrt(v) (sqrt(v)) // TODO: remove math.h and make custom sqrt
+
+#define xtd_round(v) // TODO
+					 //
+#define xtd_cos32(v) // TODO
+#define xtd_cos64(v) // TODO
+#define xtd_sin32(v) // TODO
+#define xtd_sin64(v) // TODO
 
 // -- Vec2 --------------------------------------------------------------------
 
@@ -1111,43 +1614,6 @@ struct MapHashEntry { u64 hash; u64 index; };
 // STRING
 //=============================================================================
 
-typedef struct {
-    char *value;
-    u64 length;
-} String;
-
-typedef struct StringBuilder {
-    String buffer;
-    u64 capacity;
-} StringBuilder;
-
-#define StrBuild(arena, builder, x) _Generic((x), \
-    WString:  StrBuildWStr,     \
-    wchar:    StrBuildWChar,    \
-    wchar *:  StrBuildCWStr,    \
-    String:   StrBuildStr,      \
-    char:     StrBuildChar,     \
-    i32:      StrBuildI32,      \
-    u32:      StrBuildU32,      \
-    u64,      StrBuildU64,      \
-    f32:      StrBuildF32       \
-    default:  StrBuildCStr)(arena, builder, x)
-
-#define StrBuildF(arena, builder, format, ...) StrBuildFormat(arena, builder, format, ## __VA_ARGS__)
-
-#define S(string) { (string), strlen(string) };
-#define StrFrom(string, start) // copy string excluding first (start) characters
-#define StrFromTo(string, start, end) // copy string from (start) index to (end) index
-#define StrCopy(arena, string); // copy string to arena
-#define StrFormat(arena, string, ...) // sprintf
-
-#define UTF8ToWChar(arena, string, builder)
-#define WStrBuilderTerm(arena, builder)
-
-#define StrIndexChar(path, char, flags)
-// SSF_SearchBackwards
-// SSF_IndexPlusOne
-// SSF_CountOnFail
 
 //=============================================================================
 // MULTITHREADING IMPLEMENTATION
