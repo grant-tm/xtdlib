@@ -5,6 +5,7 @@
 #include <stdlib.h> // malloc
 #include <stdio.h> // printf
 #include <stdint.h> // int types
+#include <uchar.h> // char types
 #include <stdbool.h> // bool
 #include <stdalign.h> // alignof, alignas
 #include <math.h> // TODO: replace sqrt & delete this
@@ -41,6 +42,8 @@ typedef float   f32;
 typedef double  f64;
 
 typedef wchar_t wchar;
+typedef char16_t char16;
+typedef char32_t char32;
 
 //=============================================================================
 // TESTING DECLARATIONS
