@@ -2336,6 +2336,144 @@ TEST(StringToUTF16Into, "String", "Conversion") {
     return 0;
 }
 
+TEST(StringFromUTF32, "String", "Conversion") {
+    // Sample UTF-32 data: ASCII, BMP, and non-BMP (😊 U+1F60A)
+    char32 text1[] = { 'H','e','l','l','o', 0x0020, 0x0041, 0x1F60A }; // "Hello A😊"
+    char32 text2[] = {0}; // empty
+    char32 *text3 = NULL;
+
+    // Non-empty UTF-32
+    String s1 = string_from_utf32(text1, sizeof(text1)/sizeof(char32));
+    if (s1.length == 0 || !s1.value) {
+        test_case_record_error(&StringFromUTF32Test, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from valid UTF-32", "");
+    }
+
+    // Empty UTF-32
+    String s2 = string_from_utf32(text2, 0);
+    if (s2.length != 0 || s2.value != NULL) {
+        test_case_record_error(&StringFromUTF32Test, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from empty UTF-32", "");
+    }
+
+    // NULL UTF-32
+    String s3 = string_from_utf32(text3, 0);
+    if (s3.length != 0 || s3.value != NULL) {
+        test_case_record_error(&StringFromUTF32Test, TEST_RESULT_INCORRECT_VALUE,
+            "failed to handle NULL UTF-32",
+            "\t-- Actual value: %p", s3.value);
+    }
+
+    return 0;
+}
+
+TEST(StringFromUTF32Alloc, "String", "Conversion") {
+    char32 text1[] = { 'T','e','s','t',0x20,0x1F603 }; // "Test 😃"
+    char32 text2[] = {0};
+    char32 *text3 = NULL;
+
+    // Non-empty UTF-32
+    String *s1 = string_from_utf32_alloc(text1, sizeof(text1)/sizeof(char32));
+    if (!s1 || s1->length == 0 || !s1->value) {
+        test_case_record_error(&StringFromUTF32AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from valid UTF-32", "");
+    }
+    if (s1) { 
+        if (s1->value) free(s1->value); 
+        free(s1); 
+    }
+
+    // Empty UTF-32
+    String *s2 = string_from_utf32_alloc(text2, 0);
+    if (!s2 || s2->length != 0 || s2->value) {
+        test_case_record_error(&StringFromUTF32AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from empty UTF-32", "");
+    }
+    if (s2) { 
+        if (s2->value) free(s2->value); 
+        free(s2); 
+    }
+
+    // NULL input
+    String *s3 = string_from_utf32_alloc(text3, 0);
+    if (s3 != NULL) {
+        test_case_record_error(&StringFromUTF32AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "NULL input should return NULL",
+            "\t-- Actual: %p", s3);
+    }
+
+    return 0;
+}
+
+TEST(StringFromUTF32Into, "String", "Conversion") {
+    char32 text1[] = { 'A','B','C',0x20,0x1F609 }; // "ABC 😉"
+    char32 *text3 = NULL;
+
+    // Allocate buffers
+    String s1; s1.value = malloc(20); s1.length = 20;
+    String s2; s2.value = malloc(3);  s2.length = 3;
+    String s3; s3.value = NULL;       s3.length = 0;
+
+    // Copy into buffer
+    string_from_utf32_into(text1, sizeof(text1)/sizeof(char32), &s1);
+    if (s1.length == 0 || !s1.value) {
+        test_case_record_error(&StringFromUTF32IntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy UTF-32 into buffer", "");
+    }
+
+    // Copy into smaller buffer
+    string_from_utf32_into(text1, sizeof(text1)/sizeof(char32), &s2);
+    if (s2.length == 0 || !s2.value) {
+        test_case_record_error(&StringFromUTF32IntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy UTF-32 into smaller buffer", "");
+    }
+
+    // NULL input string
+    string_from_utf32_into(text3, 0, &s1);  // no crash
+    // NULL String pointer
+    string_from_utf32_into(text1, sizeof(text1)/sizeof(char32), NULL); // no crash
+    // String with NULL value
+    string_from_utf32_into(text1, sizeof(text1)/sizeof(char32), &s3); // no crash
+
+    free(s1.value);
+    free(s2.value);
+    free(s3.value);
+
+    return 0;
+}
+
+TEST(StringToUTF32Alloc, "String", "Conversion") {
+    const char *text = "Hi 😄";
+    String s = string_from_cstr(text, strlen(text));
+
+    char32 *c32 = string_to_utf32_alloc(&s);
+    if (!c32) {
+        test_case_record_error(&StringToUTF32AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate UTF-32 from String", "");
+    }
+    if (c32[0] != 'H' || c32[1] != 'i') {
+        test_case_record_error(&StringToUTF32AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "UTF-32 encoding incorrect at start", "");
+    }
+
+    free(c32);
+    return 0;
+}
+
+TEST(StringToUTF32Into, "String", "Conversion") {
+    const char *text = "Hello 😉";
+    String s = string_from_cstr(text, strlen(text));
+    char32 buffer[10] = {0};
+
+    string_to_utf32_into(&s, buffer, 10);
+    if (buffer[0] != 'H' || buffer[5] == 0) {
+        test_case_record_error(&StringToUTF32IntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy String into UTF-32 buffer", "");
+    }
+
+    return 0;
+}
+
 //=============================================================================
 // Math Module
 //=============================================================================

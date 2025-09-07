@@ -1899,12 +1899,123 @@ void string_to_utf16_into(const String *string, char16 *c16str, u64 c16str_size)
 
 // -- utf32 -------------------------------------
 
-String string_from_utf32 (const char32 *c32str, u64 c32str_length);
-String *string_from_utf32_alloc (const char32 *c32str, u64 c32str_length);
-void string_from_utf32_into (const char32 *c32str, u64 c32str_length, String *string);
+// Convert UTF-32 array to String (UTF-8)
+String string_from_utf32(const char32 *c32str, u64 c32str_length) {
+    String s = {0};
+    if (!c32str || c32str_length == 0) return s;
 
-char32 *string_to_utf32_alloc (const String *string);
-void string_to_utf32_into (const String *string, char32 *c32str, u64 c32str_size);
+    // worst-case: 4 bytes per UTF-32 codepoint
+    u64 max_bytes = c32str_length * 4;
+    char *buffer = malloc(max_bytes);
+    if (!buffer) return s;
+
+    u64 pos = 0;
+    for (u64 i = 0; i < c32str_length; ++i) {
+        u32 codepoint = c32str[i];
+        // validate codepoint
+        if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+            codepoint = 0xFFFD; // invalid
+        }
+        pos += utf8_encode_char(codepoint, buffer + pos);
+    }
+
+    s.value = buffer;
+    s.length = pos;
+    return s;
+}
+
+// Allocate and convert UTF-32 array to String
+String *string_from_utf32_alloc(const char32 *c32str, u64 c32str_length) {
+    if (!c32str) return NULL;
+
+    String *s = malloc(sizeof(String));
+    if (!s) return NULL;
+
+    if (c32str_length == 0) {
+        s->length = 0;
+        s->value = NULL;
+        return s;
+    }
+
+    u64 max_bytes = c32str_length * 4;
+    s->value = malloc(max_bytes);
+    if (!s->value) {
+        free(s);
+        return NULL;
+    }
+
+    u64 pos = 0;
+    for (u64 i = 0; i < c32str_length; ++i) {
+        u32 codepoint = c32str[i];
+        if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+            codepoint = 0xFFFD;
+        }
+        pos += utf8_encode_char(codepoint, s->value + pos);
+    }
+
+    s->length = pos;
+    return s;
+}
+
+// Convert UTF-32 array into existing String buffer
+void string_from_utf32_into(const char32 *c32str, u64 c32str_length, String *string) {
+    if (!string) return;
+
+    // free existing buffer
+    if (string->value) {
+        free(string->value);
+        string->value = NULL;
+        string->length = 0;
+    }
+
+    if (!c32str || c32str_length == 0) return;
+
+    u64 max_bytes = c32str_length * 4;
+    string->value = malloc(max_bytes);
+    if (!string->value) return;
+
+    u64 pos = 0;
+    for (u64 i = 0; i < c32str_length; ++i) {
+        u32 codepoint = c32str[i];
+        if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+            codepoint = 0xFFFD;
+        }
+        pos += utf8_encode_char(codepoint, string->value + pos);
+    }
+
+    string->length = pos;
+}
+
+// Convert String (UTF-8) to UTF-32 array (malloc)
+char32 *string_to_utf32_alloc(const String *string) {
+    if (!string || string->length == 0) return NULL;
+
+    char32 *buffer = malloc(string->length * sizeof(char32)); // worst-case: 1 UTF-32 per UTF-8 byte
+    if (!buffer) return NULL;
+
+    u64 out_pos = 0;
+    u64 i = 0;
+    while (i < string->length) {
+        UTF8Iterator it = utf8_next(string, &i);
+        if (it.codepoint == 0) break;
+        buffer[out_pos++] = it.codepoint == 0xFFFD ? 0xFFFD : it.codepoint;
+    }
+
+    return buffer;
+}
+
+// Convert String (UTF-8) into existing UTF-32 array
+void string_to_utf32_into(const String *string, char32 *c32str, u64 c32str_size) {
+    if (!string || !c32str || c32str_size == 0) return;
+
+    u64 out_pos = 0;
+    u64 i = 0;
+    while (i < string->length && out_pos < c32str_size) {
+        UTF8Iterator it = utf8_next(string, &i);
+        if (it.codepoint == 0) break;
+        c32str[out_pos++] = it.codepoint == 0xFFFD ? 0xFFFD : it.codepoint;
+    }
+}
 
 // -- format ------------------------------------
 
