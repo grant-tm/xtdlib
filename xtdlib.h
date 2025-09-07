@@ -424,6 +424,7 @@ typedef struct {
 
 #define STRING_START(string) (((string).length) ? ((string).value[(string).length]) : NULL)
 #define STRING_END(string) ((string).value)
+#define STRING_INVALID_INDEX ((u64) -1)
 
 // -- string management -------------------------
 
@@ -1644,7 +1645,7 @@ u64 string_find_next_char (const String *s, char c) {
 			return index;
 		}
 	}
-	return (u64) -1;
+	return STRING_INVALID_INDEX;
 }
 
 u64 string_find_last_char (const String *s, char c) {
@@ -1653,39 +1654,33 @@ u64 string_find_last_char (const String *s, char c) {
 			return index;
 		}
 	}
-	return (u64) -1;
+	return STRING_INVALID_INDEX;
 }
 
-u64 string_find_next_substring (const String *s, const String *substr) {
-	if (s->length < substr->length) {
-		return (u64) -1;
-	}
-	for (u64 index = 0; index <= s->length - substr->length; ++index) { 
-		String *s_slice = string_copy_slice(s, index, index + substr->length);
-		if (string_is_equal(s_slice, substr)) {
-			free(s_slice->value);
-			return index;
-		}
-		free(s_slice->value);
-	}
-	return (u64) -1;
+u64 string_find_next_substring(const String *s, const String *substr) {
+    if (substr->length == 0) { return 0; }
+    if (s->length < substr->length) { return STRING_INVALID_INDEX; }
+
+    for (u64 index = 0; index <= s->length - substr->length; ++index) {
+        if (memory_compare(s->value + index, substr->value, substr->length) == 0) {
+            return index; 
+        }
+    }
+
+    return STRING_INVALID_INDEX;
 }
 
-u64 string_find_last_substring (const String *s, const String *substr) {
-	if (s->length < substr->length) {
-		return (u64) -1;
-	}
+u64 string_find_last_substring(const String *s, const String *substr) {
+    if (substr->length == 0) { return s->length; }
+    if (s->length < substr->length) { return STRING_INVALID_INDEX; }
+ 
+    for (u64 index = s->length - substr->length + 1; index-- > 0; ) {
+        if (memory_compare(s->value + index, substr->value, substr->length) == 0) {
+            return index; 
+        }
+    }
 
-	for (u64 index = s->length - substr->length; index-- > 0; ) { 
-		String *s_slice = string_copy_slice(s, index - substr->length, index);
-		if (string_is_equal(s_slice, substr)) {
-			free(s_slice->value);
-			return index;
-		}
-		free(s_slice->value);
-	}
-
-	return (u64) -1;
+    return STRING_INVALID_INDEX;
 }
 
 //=============================================================================
