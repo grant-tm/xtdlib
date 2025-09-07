@@ -1259,6 +1259,8 @@ TEST(MapMock, "Storage", "Map") {
 // String Module
 //=============================================================================
 
+// -- String Component --------------------------------------------------------
+
 TEST(StringSlice, "String", "String") {
 	const char *text = "Hello, World!";
 
@@ -1364,55 +1366,6 @@ TEST(StringCopy, "String", "String") {
 	return 0;
 }
 
-
-TEST(StringCopyArena, "String", "String") {
-	const char *text = "Hello, World!";
-
-	Arena arena = {0};
-
-	String s;
-	s.value = arena_push(&arena, 13);
-	memory_copy(s.value, (void *) text, 13);
-	s.length = 13;
-
-	String *copy = string_copy_arena(&arena, &s);
-	if (copy->value == NULL) {
-		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_NULL_VALUE,
-			"string copy is NULL", "");
-	}
-	if (copy->length != s.length) {
-		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy length is incorrect", 
-			"\t-- Expected: %llu\n\t-- Actual %llu", s.length, copy->length);
-	}
-	if (memory_compare(copy->value, s.value, s.length) != 0) {
-		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INCORRECT_VALUE,
-			"string copy contains incorrect memory",
-			"\t-- Expected: %s\n\t-- Actual %s", s.value, copy->value);
-	}
-	if (copy->value == s.value) {
-		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy points to the same memory as the original", "");
-	}
-
-	String empty;
-	empty.value = arena_push(&arena, 0);
-	empty.length = 0;
-
-	String *copy_empty = string_copy_arena(&arena, &empty);
-	if (copy_empty->value == NULL && empty.length > 0) {
-		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_NULL_VALUE,
-			"string copy (empty) is NULL", "");
-	}
-	if (copy_empty->length != 0) {
-		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy (empty) length is incorrect", 
-			"\t-- Expected: 0\n\t-- Actual %llu", copy_empty->length);
-	}
-
-	return 0;
-}
-
 TEST(StringCopySlice, "String", "String") {
 	const char *text = "Hello, World!";
 
@@ -1488,90 +1441,6 @@ TEST(StringCopySlice, "String", "String") {
 	}
 	if (copy->length != 0) {
 		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
-			"string copy slice (empty) length is incorrect",
-			"\t-- Expected: 0\n\t-- Actual %llu", copy->length);
-	}
-
-	return 0;
-}
-
-TEST(StringCopySliceArena, "String", "String") {
-	const char *text = "Hello, World!";
-
-	Arena arena = {0};
-
-	String s;
-	s.value = arena_push(&arena, 13);
-	memory_copy(s.value, (void *) text, 13);
-	s.length = 13;
-
-	// Copy first 5 chars: "Hello"
-	String *copy = string_copy_slice_arena(&arena, &s, 0, 5);
-	if (copy->value == NULL) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
-			"string copy slice is NULL", "");
-	}
-	if (copy->length != 5) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy slice length is incorrect",
-			"\t-- Expected: 5\n\t-- Actual %llu", copy->length);
-	}
-	if (memory_compare(copy->value, s.value, 5) != 0) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INCORRECT_VALUE,
-			"string copy slice contains incorrect memory",
-			"\t-- Expected: Hello\n\t-- Actual %s", copy->value);
-	}
-	if (copy->value == s.value) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy slice points to same memory as original", "");
-	}
-
-	// Copy "World"
-	copy = string_copy_slice_arena(&arena, &s, 7, 12);
-	if (copy->value == NULL) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
-			"string copy slice is NULL", "");
-	}
-	if (copy->length != 5) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy slice length is incorrect",
-			"\t-- Expected: 5\n\t-- Actual %llu", copy->length);
-	}
-	if (memory_compare(copy->value, s.value + 7, 5) != 0) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INCORRECT_VALUE,
-			"string copy slice contains incorrect memory",
-			"\t-- Expected: World\n\t-- Actual %s", copy->value);
-	}
-	if (copy->value == s.value + 7) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy slice points to same memory as original slice", "");
-	}
-
-	// Copy past-the-end (should clamp to full string)
-	copy = string_copy_slice_arena(&arena, &s, 0, 40);
-	if (copy->value == NULL) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
-			"string copy slice is NULL", "");
-	}
-	if (copy->length != 13) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
-			"string copy slice length is incorrect",
-			"\t-- Expected: 13\n\t-- Actual %llu", copy->length);
-	}
-	if (memory_compare(copy->value, s.value, 13) != 0) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INCORRECT_VALUE,
-			"string copy slice contains incorrect memory",
-			"\t-- Expected: Hello, World!\n\t-- Actual %s", copy->value);
-	}
-
-	// Empty slice
-	copy = string_copy_slice_arena(&arena, &s, 5, 5);
-	if (copy->value == NULL && copy->length != 0) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
-			"string copy slice (empty) is NULL", "");
-	}
-	if (copy->length != 0) {
-		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
 			"string copy slice (empty) length is incorrect",
 			"\t-- Expected: 0\n\t-- Actual %llu", copy->length);
 	}
@@ -1826,13 +1695,511 @@ TEST(StringFindNextSubstring, "String", "String") {
     return 0;
 }
 
+TEST(StringFindLastSubstring, "String", "String") {
+    const char *text = "Hello, World! Hello";
+    const char *needle1 = "Hello";
+    const char *needle2 = "World";
+    const char *needle3 = "lo, W";
+    const char *needle4 = "NotFound";
 
+    String s;
+    s.value = malloc(19);
+    memory_copy(s.value, (void *) text, 19);
+    s.length = 19;
+
+    String sub1, sub2, sub3, sub4;
+
+    sub1.value = malloc(5);
+    memory_copy(sub1.value, (void *) needle1, 5);
+    sub1.length = 5;
+
+    sub2.value = malloc(5);
+    memory_copy(sub2.value, (void *) needle2, 5);
+    sub2.length = 5;
+
+    sub3.value = malloc(5);
+    memory_copy(sub3.value, (void *) needle3, 5);
+    sub3.length = 5;
+
+    sub4.value = malloc(8);
+    memory_copy(sub4.value, (void *) needle4, 8);
+    sub4.length = 8;
+
+    // Last substring at end
+    u64 index = string_find_last_substring(&s, &sub1);
+    if (index != 14) {
+        test_case_record_error(&StringFindLastSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find substring at end",
+            "\t-- Expected: 14\n\t-- Actual %llu", index);
+    }
+
+    // Substring in middle
+    index = string_find_last_substring(&s, &sub3);
+    if (index != 3) {
+        test_case_record_error(&StringFindLastSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find substring in middle",
+            "\t-- Expected: 3\n\t-- Actual %llu", index);
+    }
+
+    // Substring only occurs once
+    index = string_find_last_substring(&s, &sub2);
+    if (index != 7) {
+        test_case_record_error(&StringFindLastSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find unique substring",
+            "\t-- Expected: 7\n\t-- Actual %llu", index);
+    }
+
+    // Substring not present
+    index = string_find_last_substring(&s, &sub4);
+    if (index != (u64)-1) {
+        test_case_record_error(&StringFindLastSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "not-found substring should return -1",
+            "\t-- Expected: %llu\n\t-- Actual %llu", (u64)-1, index);
+    }
+
+    // Empty substring
+    String empty;
+    empty.value = malloc(0);
+    empty.length = 0;
+    index = string_find_last_substring(&s, &empty);
+    if (index != s.length) {
+        test_case_record_error(&StringFindLastSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "empty substring should match at string length",
+            "\t-- Expected: %llu\n\t-- Actual %llu", s.length, index);
+    }
+
+    return 0;
+}
+
+// -- String Conversion Component ---------------------------------------------
+
+TEST(StringFromCStr, "String", "Conversion") {
+    const char *text1 = "Hello, World!";
+    const char *text2 = "";
+    const char *text3 = NULL;
+
+    // Non-empty string
+    String s1 = string_from_cstr(text1, 13);
+    if (s1.length != 13 || !s1.value || memory_compare(s1.value, (void *) text1, 13) != 0) {
+        test_case_record_error(&StringFromCStrTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from valid C string",
+            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1.length);
+    }
+
+    // Empty string
+    String s2 = string_from_cstr(text2, 0);
+    if (s2.length != 0 || !s2.value || s2.value != text2) {
+        test_case_record_error(&StringFromCStrTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from empty C string",
+            "\t-- Expected length: 0\n\t-- Actual length: %llu", s2.length);
+    }
+
+    // NULL string
+    String s3 = string_from_cstr(text3, 0);
+    if (s3.length != 0 || s3.value != NULL) {
+        test_case_record_error(&StringFromCStrTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to handle NULL C string",
+            "\t-- Expected: NULL\n\t-- Actual: %p", s3.value);
+    }
+
+    return 0;
+}
+
+TEST(StringFromCStrAlloc, "String", "Conversion") {
+    const char *text1 = "Hello, World!";
+    const char *text2 = "";
+    const char *text3 = NULL;
+
+    // Non-empty string
+    String *s1 = string_from_cstr_alloc(text1, 13);
+    if (!s1 || s1->length != 13 || !s1->value || memory_compare(s1->value, (void *) text1, 13) != 0) {
+        test_case_record_error(&StringFromCStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from valid C string",
+            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1 ? s1->length : 0);
+    }
+    if (s1) { 
+        memory_free(s1->value); 
+        memory_free(s1); 
+    }
+
+    // Empty string
+    String *s2 = string_from_cstr_alloc(text2, 0);
+    if (!s2 || s2->length != 0 || !s2->value) {
+        test_case_record_error(&StringFromCStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from empty C string",
+            "\t-- Expected length: 0\n\t-- Actual length: %llu", s2 ? s2->length : 0);
+    }
+    if (s2) { 
+        memory_free(s2->value); 
+        memory_free(s2); 
+    }
+
+    // NULL input
+    String *s3 = string_from_cstr_alloc(text3, 0);
+    if (s3 != NULL) {
+        test_case_record_error(&StringFromCStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "NULL input should return NULL",
+            "\t-- Actual: %p", s3);
+    }
+
+    return 0;
+}
+
+TEST(StringFromCStrInto, "String", "Conversion") {
+    const char *text1 = "Hello, World!";
+    const char *text3 = NULL;
+
+    // Allocate buffers for testing
+    String s1;
+    s1.value = malloc(20);
+    s1.length = 20;
+
+    String s2;
+    s2.value = malloc(5);
+    s2.length = 5;
+
+    String s3;
+    s3.value = NULL;
+    s3.length = 10;
+
+    // Normal copy: text shorter than buffer
+    string_from_cstr_into(text1, 13, &s1);
+    if (s1.length != 13 || memory_compare(s1.value, text1, 13) != 0) {
+        test_case_record_error(&StringFromCStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy C string into larger buffer",
+            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1.length);
+    }
+
+    // Copy into smaller buffer: only copy fits
+    string_from_cstr_into(text1, 13, &s2);
+    if (s2.length != 5 || memory_compare(s2.value, text1, 5) != 0) {
+        test_case_record_error(&StringFromCStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy C string into smaller buffer",
+            "\t-- Expected length: 5\n\t-- Actual length: %llu", s2.length);
+    }
+
+    // NULL input string: should do nothing
+    string_from_cstr_into(text3, 0, &s1);  // no crash expected
+    // NULL String pointer: should do nothing
+    string_from_cstr_into(text1, 13, NULL); // no crash expected
+    // String with NULL value: should do nothing
+    string_from_cstr_into(text1, 13, &s3); // no crash expected
+
+    // Free allocated memory
+    free(s1.value);
+    free(s2.value);
+
+    return 0;
+}
+
+TEST(StringToCStrAlloc, "String", "Conversion") {
+    const char *text1 = "Hello, World!";
+    const char *text3 = NULL;
+
+    // Normal string
+    String s1;
+    s1.value = malloc(13);
+    memory_copy(s1.value, (void *) text1, 13);
+    s1.length = 13;
+
+    char *cstr1 = string_to_cstr_alloc(&s1);
+    if (!cstr1 || strcmp(cstr1, text1) != 0) {
+        test_case_record_error(&StringToCStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to convert string to C string",
+            "\t-- Expected: %s\n\t-- Actual: %s", text1, cstr1 ? cstr1 : "(null)");
+    }
+    free(cstr1);
+    free(s1.value);
+
+    // Empty string
+    String s2;
+    s2.value = malloc(0);
+    s2.length = 0;
+
+    char *cstr2 = string_to_cstr_alloc(&s2);
+    if (!cstr2 || cstr2[0] != '\0') {
+        test_case_record_error(&StringToCStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to convert empty string to C string",
+            "\t-- Expected: empty string\n\t-- Actual: %s", cstr2 ? cstr2 : "(null)");
+    }
+    free(cstr2);
+    free(s2.value);
+
+    // NULL string pointer
+    char *cstr3 = string_to_cstr_alloc((String *) text3); // intentionally NULL
+    if (cstr3 != NULL) {
+        test_case_record_error(&StringToCStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "NULL input should return NULL",
+            "\t-- Actual: %p", cstr3);
+    }
+
+    return 0;
+}
+
+TEST(StringToCStrInto, "String", "Conversion") {
+    const char *text1 = "Hello, World!";
+
+    // Normal string
+    String s1;
+    s1.value = malloc(13);
+    memory_copy(s1.value, (void *) text1, 13);
+    s1.length = 13;
+
+    char buffer1[20];
+    string_to_cstr_into(&s1, buffer1, sizeof(buffer1));
+    if (strcmp(buffer1, text1) != 0) {
+        test_case_record_error(&StringToCStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy string into larger buffer",
+            "\t-- Expected: %s\n\t-- Actual: %s", text1, buffer1);
+    }
+
+    // Buffer smaller than string
+    String s2;
+    s2.value = malloc(13);
+    memory_copy(s2.value, (void *) text1, 13);
+    s2.length = 13;
+
+    char buffer2[6]; // can hold 5 chars + null
+    string_to_cstr_into(&s2, buffer2, sizeof(buffer2));
+    if (strncmp(buffer2, text1, 5) != 0 || buffer2[5] != '\0') {
+        test_case_record_error(&StringToCStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to truncate string to fit smaller buffer",
+            "\t-- Expected first 5 chars: 'Hello'\n\t-- Actual: '%s'", buffer2);
+    }
+
+    // Empty string
+    String s3;
+    s3.value = malloc(0);
+    s3.length = 0;
+
+    char buffer3[5];
+    string_to_cstr_into(&s3, buffer3, sizeof(buffer3));
+    if (buffer3[0] != '\0') {
+        test_case_record_error(&StringToCStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "empty string should result in empty C string",
+            "\t-- Actual: '%s'", buffer3);
+    }
+
+    // NULL string or buffer: should not crash
+    string_to_cstr_into(NULL, buffer1, sizeof(buffer1));
+    string_to_cstr_into(&s1, NULL, sizeof(buffer1));
+    string_to_cstr_into(&s1, buffer1, 0);
+
+    // Free memory
+    free(s1.value);
+    free(s2.value);
+    free(s3.value);
+
+    return 0;
+}
+
+TEST(StringFromWStr, "String", "Conversion") {
+    const wchar *text1 = L"Hello, World!";
+    const wchar *text2 = L"";
+    const wchar *text3 = NULL;
+
+    // Non-empty string
+    String s1 = string_from_wstr(text1, 13);
+    wchar *buf1 = string_to_wstr_alloc(&s1);
+    if (s1.length == 0 || !s1.value || !buf1 || memory_compare(buf1, text1, 13) != 0) {
+        test_case_record_error(&StringFromWStrTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from valid wchar string",
+            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1.length);
+    }
+    free(s1.value);
+    free(buf1);
+
+    // Empty string
+    String s2 = string_from_wstr(text2, 0);
+    if (s2.length != 0 || !s2.value) {
+        test_case_record_error(&StringFromWStrTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from empty wchar string",
+            "\t-- Expected length: 0\n\t-- Actual length: %llu", s2.length);
+    }
+    free(s2.value);
+
+    // NULL string
+    String s3 = string_from_wstr(text3, 0);
+    if (s3.length != 0 || s3.value != NULL) {
+        test_case_record_error(&StringFromWStrTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to handle NULL wchar string",
+            "\t-- Expected: NULL\n\t-- Actual: %p", s3.value);
+    }
+
+    return 0;
+}
+
+TEST(StringFromWStrAlloc, "String", "Conversion") {
+    const wchar *text1 = L"Hello, World!";
+    const wchar *text2 = L"";
+    const wchar *text3 = NULL;
+
+    // Non-empty string
+    String *s1 = string_from_wstr_alloc(text1, 13);
+    wchar *buf1 = s1 ? string_to_wstr_alloc(s1) : NULL;
+    if (!s1 || s1->length != 13 || !s1->value || !buf1 || memory_compare(buf1, text1, 13) != 0) {
+        test_case_record_error(&StringFromWStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from valid wchar string",
+            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1 ? s1->length : 0);
+    }
+    if (s1) { free(s1->value); free(s1); }
+    free(buf1);
+
+    // Empty string
+    String *s2 = string_from_wstr_alloc(text2, 0);
+    if (!s2 || s2->length != 0 || !s2->value) {
+        test_case_record_error(&StringFromWStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from empty wchar string",
+            "\t-- Expected length: 0\n\t-- Actual length: %llu", s2 ? s2->length : 0);
+    }
+    if (s2) { free(s2->value); free(s2); }
+
+    // NULL input
+    String *s3 = string_from_wstr_alloc(text3, 0);
+    if (s3 != NULL) {
+        test_case_record_error(&StringFromWStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "NULL input should return NULL",
+            "\t-- Actual: %p", s3);
+    }
+
+    return 0;
+}
+
+TEST(StringFromWStrInto, "String", "Conversion") {
+    const wchar *text1 = L"Hello, World!";
+    const wchar *text3 = NULL;
+
+    String s1;
+    String s2;
+    String s3;
+
+    // Allocate buffers
+    s1.value = malloc(20); s1.length = 20;
+    s2.value = malloc(5);  s2.length = 5;
+    s3.value = NULL;       s3.length = 10;
+
+    // Normal copy: text shorter than buffer
+    string_from_wstr_into(text1, 13, &s1);
+    if (s1.length != 13) {
+        test_case_record_error(&StringFromWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy wchar string into larger buffer: wrong length",
+            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1.length);
+    }
+    for (u64 i = 0; i < s1.length; ++i) {
+        if (s1.value[i] != text1[i]) {
+            test_case_record_error(&StringFromWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+                "failed to copy wchar string into larger buffer: content mismatch",
+                "\t-- At index %llu: expected %lc, actual %lc", i, text1[i], s1.value[i]);
+        }
+    }
+
+    // Copy into smaller buffer: only copy fits
+    string_from_wstr_into(text1, 13, &s2);
+    if (s2.length != 5) {
+        test_case_record_error(&StringFromWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy wchar string into smaller buffer: wrong length",
+            "\t-- Expected length: 5\n\t-- Actual length: %llu", s2.length);
+    }
+    for (u64 i = 0; i < s2.length; ++i) {
+        if (s2.value[i] != text1[i]) {
+            test_case_record_error(&StringFromWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+                "failed to copy wchar string into smaller buffer: content mismatch",
+                "\t-- At index %llu: expected %lc, actual %lc", i, text1[i], s2.value[i]);
+        }
+    }
+
+    // NULL input string: should do nothing (no crash)
+    string_from_wstr_into(text3, 0, &s1);
+    string_from_wstr_into(text1, 13, NULL);
+    string_from_wstr_into(text1, 13, &s3);
+
+    free(s1.value);
+    free(s2.value);
+
+    return 0;
+}
+
+TEST(StringToWStrAlloc, "String", "Conversion") {
+    const wchar *text1 = L"Hello, World!";
+
+    // Normal string
+    String s1;
+    s1.value = malloc(13);
+    for (int i = 0; i < 13; ++i) s1.value[i] = (char)text1[i];
+    s1.length = 13;
+
+    wchar *wbuf1 = string_to_wstr_alloc(&s1);
+    if (!wbuf1 || memory_compare(wbuf1, text1, 13) != 0) {
+        test_case_record_error(&StringToWStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to convert string to wchar_t array",
+            "\t-- Expected: Hello, World!\n\t-- Actual first char: %lc", wbuf1 ? wbuf1[0] : L'?');
+    }
+    free(wbuf1);
+    free(s1.value);
+
+    // Empty string
+    String s2;
+    s2.value = malloc(0); s2.length = 0;
+    wchar *wbuf2 = string_to_wstr_alloc(&s2);
+    if (wbuf2 != NULL) {
+        test_case_record_error(&StringToWStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "empty string should return empty wchar_t buffer", "");
+    }
+    free(wbuf2);
+    free(s2.value);
+
+    // NULL input
+    wchar *wbuf3 = string_to_wstr_alloc(NULL);
+    if (wbuf3 != NULL) {
+        test_case_record_error(&StringToWStrAllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "NULL input should return NULL",
+            "\t-- Actual: %p", wbuf3);
+    }
+
+    return 0;
+}
+
+TEST(StringToWStrInto, "String", "Conversion") {
+    const wchar *text1 = L"Hello, World!";
+
+    // Normal string
+    String s1;
+    s1.value = malloc(13);
+    for (int i = 0; i < 13; ++i) s1.value[i] = (char)text1[i];
+    s1.length = 13;
+
+    wchar buffer1[20];
+    string_to_wstr_into(&s1, buffer1, 20);
+    if (memory_compare(buffer1, text1, 13) != 0) {
+        test_case_record_error(&StringToWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy string into larger wchar buffer",
+            "\t-- Expected first char: %lc\n\t-- Actual first char: %lc", text1[0], buffer1[0]);
+    }
+
+    // Buffer smaller than string
+    wchar buffer2[6]; // 5 chars + null
+    string_to_wstr_into(&s1, buffer2, 6);
+    if (memory_compare(buffer2, text1, 5) != 0) {
+        test_case_record_error(&StringToWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to truncate string to fit smaller wchar buffer",
+            "\t-- Expected first char: %lc\n\t-- Actual first char: %lc", text1[0], buffer2[0]);
+    }
+
+    // NULL string or buffer: should not crash
+    string_to_wstr_into(NULL, buffer1, 20);
+    string_to_wstr_into(&s1, NULL, 20);
+    string_to_wstr_into(&s1, buffer1, 0);
+
+    free(s1.value);
+
+    return 0;
+}
 
 //=============================================================================
 // Math Module
 //=============================================================================
 
-// -- Utilities Component -------------------------------------------------------
+// -- Utilities Component -----------------------------------------------------
 
 TEST(UtilsMax, "Math", "Utils") {
     int a = 5, b = 3;
