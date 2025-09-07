@@ -485,7 +485,42 @@ String string_from_format (const char* fmt, ...);
 String *string_from_format_alloc (const char *fmt, ...);
 void string_from_format_into (String *string, const char *fmt, ...);
 
-// -- encoding iterators ------------------------
+// -- encoding helpers --------------------------
+
+static u64 utf8_encode_char(u32 codepoint, char *buffer) {
+    if (codepoint <= 0x7F) {
+        buffer[0] = (char)codepoint;
+        return 1;
+    } else if (codepoint <= 0x7FF) {
+        buffer[0] = 0xC0 | (codepoint >> 6);
+        buffer[1] = 0x80 | (codepoint & 0x3F);
+        return 2;
+    } else if (codepoint <= 0xFFFF) {
+        buffer[0] = 0xE0 | (codepoint >> 12);
+        buffer[1] = 0x80 | ((codepoint >> 6) & 0x3F);
+        buffer[2] = 0x80 | (codepoint & 0x3F);
+        return 3;
+    } else {
+        buffer[0] = 0xF0 | (codepoint >> 18);
+        buffer[1] = 0x80 | ((codepoint >> 12) & 0x3F);
+        buffer[2] = 0x80 | ((codepoint >> 6) & 0x3F);
+        buffer[3] = 0x80 | (codepoint & 0x3F);
+        return 4;
+    }
+}
+
+static u64 utf16_encode_char(u32 codepoint, char16 *buffer) {
+    if (codepoint <= 0xFFFF) {
+        buffer[0] = (char16)codepoint;
+        return 1;
+    } else {
+        // encode surrogate pair
+        codepoint -= 0x10000;
+        buffer[0] = 0xD800 | ((codepoint >> 10) & 0x3FF);
+        buffer[1] = 0xDC00 | (codepoint & 0x3FF);
+        return 2;
+    }
+}
 
 typedef struct {
     u32 codepoint;   // Unicode scalar value
@@ -496,44 +531,42 @@ typedef struct {
 // Decode next UTF-8 codepoint starting at s->value[*i].
 // Advances *i by the codepoint length in bytes.
 // Returns 0xFFFD (replacement char) on invalid UTF-8.
-static inline UTF8Iterator utf8_next (const String *s, u64 *i) {
-    UTF8Iterator it = { .codepoint = 0xFFFD, .index = *i, .size = 1 };
-    if (*i >= s->length) {
-        it.codepoint = 0; // signal end
-        return it;
-    }
+static inline UTF8Iterator utf8_next(const String *s, u64 *i) {
+    UTF8Iterator it = { .codepoint = 0, .index = *i, .size = 0 };
 
-    const byte *bytes = (const byte *) s->value + *i;
-    byte b0 = bytes[0];
+    if (*i >= s->length) return it;  // end
 
-	// 1-byte: ASCII fast path
+    const byte *b = (const byte *)s->value + *i;
+    byte b0 = b[0];
+
     if (b0 < 0x80) {
+        // 1-byte ASCII
         it.codepoint = b0;
         it.size = 1;
-    } 
-    // 2-byte sequence
-	else if ((b0 >> 5) == 0x6 && *i + 1 < s->length) {
-        byte b1 = bytes[1];
+    } else if ((b0 >> 5) == 0x6 && *i + 1 < s->length) {
+        // 2-byte
+        byte b1 = b[1];
         if ((b1 & 0xC0) == 0x80) {
             it.codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
             it.size = 2;
-        }
-    } 
-    // 3-byte sequence
-	else if ((b0 >> 4) == 0xE && *i + 2 < s->length) {
-        byte b1 = bytes[1], b2 = bytes[2];
-        if (((b1 & 0xC0) == 0x80) && ((b2 & 0xC0) == 0x80)) {
+        } else it.codepoint = 0xFFFD, it.size = 1;
+    } else if ((b0 >> 4) == 0xE && *i + 2 < s->length) {
+        // 3-byte
+        byte b1 = b[1], b2 = b[2];
+        if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80) {
             it.codepoint = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
             it.size = 3;
-        }
-    } 
-    // 4-byte sequence
-	else if ((b0 >> 3) == 0x1E && *i + 3 < s->length) {
-        byte b1 = bytes[1], b2 = bytes[2], b3 = bytes[3];
-        if (((b1 & 0xC0) == 0x80) && ((b2 & 0xC0) == 0x80) && ((b3 & 0xC0) == 0x80)) {
+        } else it.codepoint = 0xFFFD, it.size = 1;
+    } else if ((b0 >> 3) == 0x1E && *i + 3 < s->length) {
+        // 4-byte
+        byte b1 = b[1], b2 = b[2], b3 = b[3];
+        if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80) {
             it.codepoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
             it.size = 4;
-        }
+        } else it.codepoint = 0xFFFD, it.size = 1;
+    } else {
+        it.codepoint = 0xFFFD;
+        it.size = 1;
     }
 
     *i += it.size;
@@ -1391,11 +1424,11 @@ String string_slice (const String *s, u64 start, u64 end) {
 }
 
 String *string_copy (const String *s) {
-    String *copied_string = malloc(sizeof(String));
+    String *copied_string = memory_allocate(memory_size_of(String));
 	if (!copied_string) return NULL;
 	
 	copied_string->length = s->length;
-	copied_string->value = malloc(copied_string->length);	
+	copied_string->value = memory_allocate(memory_size_of(copied_string->length));	
     if (!copied_string->value) return NULL;
 
 	memory_copy(copied_string->value, s->value, s->length);
@@ -1687,12 +1720,182 @@ void string_to_wstr_into(const String *string, wchar *wstr, u64 wstr_size) {
 
 // -- utf16 -------------------------------------
 
-String string_from_utf16 (const char16 *c16str, u64 c16str_size);
-String *string_from_utf16_alloc (const char16 *c16str, u64 c16str_size);
-void string_from_utf16_into (const char16 *c16str, u64 c16str_size, String *string);
+String string_from_utf16 (const char16 *c16str, u64 c16str_size) {
+    String s = {0};
+    if (!c16str || c16str_size == 0) { return s; }
 
-char16 *string_to_utf16_alloc (const String *string);
-void string_to_utf16_into (const String *string, char16 *c16str, u64 c16str_size);
+    // worst-case UTF-8 size: 3 bytes per UTF-16 code unit, plus 1 for safety
+    u64 max_bytes = c16str_size * 3;
+    char *buffer = malloc(max_bytes);
+    if (!buffer) return s;
+
+    u64 pos = 0;
+    for (u64 i = 0; i < c16str_size; ++i) {
+        u32 codepoint;
+        char16 cu = c16str[i];
+
+        if (cu >= 0xD800 && cu <= 0xDBFF && i + 1 < c16str_size) {
+            // high surrogate
+            char16 cu2 = c16str[i+1];
+            if (cu2 >= 0xDC00 && cu2 <= 0xDFFF) {
+                codepoint = ((cu - 0xD800) << 10) + (cu2 - 0xDC00) + 0x10000;
+                i++;
+            } else {
+                codepoint = 0xFFFD; // invalid surrogate pair
+            }
+        } else if (cu >= 0xDC00 && cu <= 0xDFFF) {
+            codepoint = 0xFFFD; // unexpected low surrogate
+        } else {
+            codepoint = cu;
+        }
+
+        pos += utf8_encode_char(codepoint, buffer + pos);
+    }
+
+    s.value = buffer;
+    s.length = pos;
+    return s;
+}
+
+String *string_from_utf16_alloc(const char16 *c16str, u64 c16str_size) {
+    if (!c16str) { return NULL; }
+
+    String *s = malloc(sizeof(String));
+    if (!s) { return NULL; }
+
+    if (c16str_size == 0) {
+        s->length = 0;
+        s->value = NULL;
+        return s;
+    }
+
+    // Convert UTF-16 into a newly allocated buffer directly
+    u64 max_bytes = c16str_size * 3;
+    s->value = malloc(max_bytes);
+    if (!s->value) {
+        free(s);
+        return NULL;
+    }
+
+    u64 pos = 0;
+    for (u64 i = 0; i < c16str_size; ++i) {
+        u32 codepoint;
+        char16 cu = c16str[i];
+
+        if (cu >= 0xD800 && cu <= 0xDBFF && i + 1 < c16str_size) {
+            char16 cu2 = c16str[i+1];
+            if (cu2 >= 0xDC00 && cu2 <= 0xDFFF) {
+                codepoint = ((cu - 0xD800) << 10) + (cu2 - 0xDC00) + 0x10000;
+                i++;
+            } else {
+                codepoint = 0xFFFD;
+            }
+        } else if (cu >= 0xDC00 && cu <= 0xDFFF) {
+            codepoint = 0xFFFD;
+        } else {
+            codepoint = cu;
+        }
+
+        pos += utf8_encode_char(codepoint, s->value + pos);
+    }
+
+    s->length = pos;
+    return s;
+}
+
+void string_from_utf16_into(const char16 *c16str, u64 c16str_size, String *string) {
+    if (!string) { return; }
+
+    // Free existing buffer if present
+    if (string->value) {
+        free(string->value);
+        string->value = NULL;
+        string->length = 0;
+    }
+
+    if (!c16str || c16str_size == 0) {
+        string->length = 0;
+        string->value = NULL;
+        return;
+    }
+
+    // Worst-case buffer: 3 bytes per UTF-16 code unit
+    u64 max_bytes = c16str_size * 3;
+    string->value = malloc(max_bytes);
+    if (!string->value) {
+        string->length = 0;
+        return;
+    }
+
+    u64 pos = 0;
+    for (u64 i = 0; i < c16str_size; ++i) {
+        u32 codepoint;
+        char16 cu = c16str[i];
+
+        if (cu >= 0xD800 && cu <= 0xDBFF && i + 1 < c16str_size) {
+            char16 cu2 = c16str[i + 1];
+            if (cu2 >= 0xDC00 && cu2 <= 0xDFFF) {
+                codepoint = ((cu - 0xD800) << 10) + (cu2 - 0xDC00) + 0x10000;
+                i++;
+            } else {
+                codepoint = 0xFFFD;
+            }
+        } else if (cu >= 0xDC00 && cu <= 0xDFFF) {
+            codepoint = 0xFFFD;
+        } else {
+            codepoint = cu;
+        }
+
+        pos += utf8_encode_char(codepoint, string->value + pos);
+    }
+
+    string->length = pos;
+}
+
+char16 *string_to_utf16_alloc(const String *string) {
+    if (!string || string->length == 0) return NULL;
+
+    // Allocate enough space for all codepoints (each may take 2 UTF-16 units)
+    u64 max_units = string->length * 2;
+    char16 *buffer = malloc(max_units * sizeof(char16));
+    if (!buffer) return NULL;
+
+    u64 out_pos = 0;
+    u64 i = 0;
+    while (i < string->length) {
+        UTF8Iterator it = utf8_next(string, &i);
+
+        if (it.codepoint == 0) break;      // end of string
+        if (it.codepoint == 0xFFFD) {      // invalid UTF-8
+            buffer[out_pos++] = 0xFFFD;
+            continue;
+        }
+
+        out_pos += utf16_encode_char(it.codepoint, buffer + out_pos);
+    }
+
+    return buffer;
+}
+
+void string_to_utf16_into(const String *string, char16 *c16str, u64 c16str_size) {
+    if (!string || !c16str || c16str_size == 0) return;
+
+    u64 out_pos = 0;
+    u64 i = 0;
+    while (i < string->length && out_pos < c16str_size) {
+        UTF8Iterator it = utf8_next(string, &i);
+        if (it.codepoint <= 0xFFFF) {
+            c16str[out_pos++] = (char16)it.codepoint;
+        } else if (out_pos + 1 < c16str_size) {
+            // surrogate pair
+            u32 cp = it.codepoint - 0x10000;
+            c16str[out_pos++] = 0xD800 | (cp >> 10);
+            c16str[out_pos++] = 0xDC00 | (cp & 0x3FF);
+        } else {
+            break; // not enough space
+        }
+    }
+}
 
 // -- utf32 -------------------------------------
 

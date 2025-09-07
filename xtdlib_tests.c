@@ -2195,6 +2195,147 @@ TEST(StringToWStrInto, "String", "Conversion") {
     return 0;
 }
 
+TEST(StringFromUTF16, "String", "Conversion") {
+    // Sample UTF-16 data: ASCII, BMP, and surrogate pair (😊 U+1F60A)
+    char16 text1[] = { 'H','e','l','l','o', 0x0020, 0x0041, 0xD83D, 0xDE0A }; // "Hello A😊"
+    char16 text2[] = {0}; // empty
+    char16 *text3 = NULL;
+
+    // Non-empty UTF-16
+    String s1 = string_from_utf16(text1, sizeof(text1)/sizeof(char16));
+    if (s1.length == 0 || !s1.value) {
+        test_case_record_error(&StringFromUTF16Test, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from valid UTF-16", "");
+    }
+
+    // Empty UTF-16
+    String s2 = string_from_utf16(text2, 0);
+    if (s2.length != 0 || s2.value != NULL) {
+        test_case_record_error(&StringFromUTF16Test, TEST_RESULT_INCORRECT_VALUE,
+            "failed to construct string from empty UTF-16", "");
+    }
+
+    // NULL UTF-16
+    String s3 = string_from_utf16(text3, 0);
+    if (s3.length != 0 || s3.value != NULL) {
+        test_case_record_error(&StringFromUTF16Test, TEST_RESULT_INCORRECT_VALUE,
+            "failed to handle NULL UTF-16",
+            "\t-- Actual value: %p", s3.value);
+    }
+
+    return 0;
+}
+
+TEST(StringFromUTF16Alloc, "String", "Conversion") {
+    char16 text1[] = { 'T','e','s','t',0x20,0xD83D,0xDE03 }; // "Test 😃"
+    char16 text2[] = {0};
+    char16 *text3 = NULL;
+
+    // Non-empty UTF-16
+    String *s1 = string_from_utf16_alloc(text1, sizeof(text1)/sizeof(char16));
+    if (!s1 || s1->length == 0 || !s1->value) {
+        test_case_record_error(&StringFromUTF16AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from valid UTF-16", "");
+    }
+    if (s1) { 
+		if (s1->value) free(s1->value); 
+		free(s1); 
+	}
+
+    // Empty UTF-16
+    String *s2 = string_from_utf16_alloc(text2, 0);
+    if (!s2 || s2->length != 0 || s2->value) {
+        test_case_record_error(&StringFromUTF16AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate string from empty UTF-16", "");
+    }
+    if (s2) { 
+		if (s2->value) free(s2->value); 
+		free(s2); 
+	}
+
+    // NULL input
+    String *s3 = string_from_utf16_alloc(text3, 0);
+    if (s3 != NULL) {
+        test_case_record_error(&StringFromUTF16AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "NULL input should return NULL",
+            "\t-- Actual: %p", s3);
+    }
+
+    return 0;
+}
+
+TEST(StringFromUTF16Into, "String", "Conversion") {
+    char16 text1[] = { 'A','B','C',0x20,0xD83D,0xDE09 }; // "ABC 😉"
+    char16 *text3 = NULL;
+
+    // Allocate buffers
+    String s1; s1.value = malloc(20); s1.length = 20;
+    String s2; s2.value = malloc(3);  s2.length = 3;
+    String s3; s3.value = NULL;       s3.length = 0;
+
+    // Copy into buffer
+    string_from_utf16_into(text1, sizeof(text1)/sizeof(char16), &s1);
+    if (s1.length == 0 || !s1.value) {
+        test_case_record_error(&StringFromUTF16IntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy UTF-16 into buffer", "");
+    }
+
+    // Copy again into s2 (note: function currently allocates new buffer)
+    string_from_utf16_into(text1, sizeof(text1)/sizeof(char16), &s2);
+    if (s2.length == 0 || !s2.value) {
+        test_case_record_error(&StringFromUTF16IntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy UTF-16 into smaller buffer", "");
+    }
+
+    // NULL input string
+    string_from_utf16_into(text3, 0, &s1);  // no crash
+    // NULL String pointer
+    string_from_utf16_into(text1, sizeof(text1)/sizeof(char16), NULL); // no crash
+    // String with NULL value
+    string_from_utf16_into(text1, sizeof(text1)/sizeof(char16), &s3); // no crash
+
+    free(s1.value);
+    free(s2.value);
+    free(s3.value);
+
+    return 0;
+}
+
+TEST(StringToUTF16Alloc, "String", "Conversion") {
+    
+	const char *text = "Hi 😄";
+    String s = string_from_cstr(text, strlen(text));
+
+	
+    char16 *c16 = string_to_utf16_alloc(&s);
+    
+	if (!c16) {
+        test_case_record_error(&StringToUTF16AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to allocate UTF-16 from String", "");
+    }
+    if (c16[0] != 'H' || c16[1] != 'i') {
+        test_case_record_error(&StringToUTF16AllocTest, TEST_RESULT_INCORRECT_VALUE,
+            "UTF-16 encoding incorrect at start", "");
+    }
+	
+    free(c16);
+    return 0;
+}
+
+TEST(StringToUTF16Into, "String", "Conversion") {
+    const char *text = "Hello 😉";
+    String s = string_from_cstr(text, 7);
+    char16 buffer[10] = {0};
+
+    string_to_utf16_into(&s, buffer, 10);
+    if (buffer[0] != 'H' || buffer[5] == 0) {
+        test_case_record_error(&StringToUTF16IntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to copy String into UTF-16 buffer", "");
+    }
+
+    return 0;
+}
+
 //=============================================================================
 // Math Module
 //=============================================================================
