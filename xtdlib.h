@@ -410,7 +410,7 @@ void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_
 #define array_clear(a) a.count = 0
 
 //=============================================================================
-// STRING DECLARATIONS
+// STRING DECLARATIONS 
 //=============================================================================
 
 typedef struct {
@@ -418,83 +418,37 @@ typedef struct {
     u64 length;
 } String;
 
-// -- string copy -------------------------------
+#define STRING_START(string) (((string).length) ? ((string).value[(string).length]) : NULL)
+#define STRING_END(string) ((string).value)
 
-static inline String string_arena_copy (Arena *arena, String s) {
-    char *copy = arena_push_array(arena, s.length, char);
-    if (!copy) {
-		return (String){0}; // alloc failed return empty string
-	}
-	xtd_copy_memory(copy, s.value, s.length);
-    return (String){ copy, s.length };
-}
+// -- string management -------------------------
 
-static inline String string_malloc_copy (String s) {
-    char *copy = malloc(s.length);
-    if (!copy) return (String){0}; // failure
-    xtd_copy_memory(copy, s.value, s.length);
-    return (String){ copy, s.length };
-}
+String string_slice (const String *s, u64 start, u64 end);
 
-static inline void string_free (String s) {
-    free(s.value);
-}
+String *string_copy (const String *s);
+String *string_copy_arena (Arena *arena, const String *s);
+String *string_copy_into (const String *string_to_copy, String *string_to_fill);
 
-// -- string slice ------------------------------
+String *string_copy_slice(const String *s, u64 start, u64 end);
+String *string_copy_slice_arena(Arena *arena, const String *string_to_copy, u64 start, u64 end);
+String *string_copy_slice_into (const String *string_to_copy, u64 start, u64 end, String *string_to_fill);
 
-static inline String string_slice (String s, u64 start, u64 end) {
-    if (start > s.length) { start = s.length; }
-    if (end > s.length) { end = s.length; }
-    if (end < start) { end = start; }
-    return (String){ s.value + start, end - start };
-}
+bool string_is_equal (const String *a, const String *b);	
 
-static inline String string_arena_copy_slice (Arena *arena, String s, u64 start, u64 end) {
-    String slice = string_slice(s, start, end);
-    char *copy = arena_push(arena, slice.length);
-    if (!copy || slice.length == 0) {
-		return (String){ NULL, 0 };
-	}
-	memcpy(copy, slice.value, slice.length);
-    return (String){ copy, slice.length };
-}
+// -- string search -----------------------------
 
-static inline String string_malloc_copy_slice (String s, u64 start, u64 end) {
-    String slice = string_slice(s, start, end);
-    char *copy = malloc(slice.length);
-    if (!copy || slice.length == 0) {
-        return (String){ NULL, 0 };
-    }
-    memcpy(copy, slice.value, slice.length);
-    return (String){ copy, slice.length };
-}
+u64 string_find_next_char (const String *s, const char c);
+u64 string_find_last_char (const String *s, const char c);
 
-static inline bool string_memory_is_equal (String a, String b) {	
-    if (a.length != b.length) {
-		return false;
-	}
-    return xtd_compare_memory(a.value, b.value, a.length) == 0;
-}
+u64 string_find_next_substring (const String *s, const String *substr);
+u64 string_find_last_substring (const String *s, const String *substr);
 
 // -- BUILDER -----------------------------------------------------------------
-
+/*
 typedef struct StringBuilder {
     String buffer;
     u64 capacity;
 } StringBuilder;
-
-#define StrBuild(arena, builder, x) _Generic((x), \
-    WString:  StrBuildWStr,     \
-    wchar:    StrBuildWChar,    \
-    wchar *:  StrBuildCWStr,    \
-    String:   StrBuildStr,      \
-    char:     StrBuildChar,     \
-    i32:      StrBuildI32,      \
-    u32:      StrBuildU32,      \
-    u64:      StrBuildU64,      \
-    f32:      StrBuildF32       \
-    default:  StrBuildCStr)(arena, builder, x)
-
 
 #define string_construct(s) ((String){ (char *)(s), strlen(s) })
 
@@ -605,9 +559,10 @@ static inline void string_build_malloc_format(StringBuilder *sb, const char *for
 
     va_end(args);
 }
+*/
 
 // -- string conversion -------------------------------------------------------
-
+/*
 typedef struct {
     u32 codepoint;   // Unicode scalar value
     u8  size;        // number of bytes in this codepoint
@@ -901,6 +856,7 @@ static inline String string_from_wchar_malloc (const wchar *input, u64 length) {
 
     return (String){buf, pos};
 }
+*/
 
 //=============================================================================
 // MATH DECLARATIONS
@@ -1609,17 +1565,129 @@ struct MapHashEntry { u64 hash; u64 index; };
 #define MapsGetPtr(map, k)
 #define MapsGetPtrNull(map, k)
 #define MapsDelete(scratch, map, k)
-
+*/
 
 //=============================================================================
-// STRING
+// STRING IMPLEMENTATION
 //=============================================================================
 
+String string_slice (const String *s, u64 start, u64 end) {
+	start = xtd_min(s->length, start);
+	end = xtd_min(end, s->length);
+	end = xtd_max(end, start);
+	return (String) {s->value + start, end - start};
+}
+
+String *string_copy (const String *s) {
+    String *copied_string = malloc(sizeof(String));
+	if (!copied_string) return NULL;
+	
+	copied_string->length = s->length;
+	copied_string->value = malloc(copied_string->length);	
+    if (!copied_string->value) return NULL;
+
+	memory_copy(copied_string->value, s->value, s->length);
+	
+	return copied_string;
+}
+
+String *string_copy_arena (Arena *arena, const String *s) {
+    String *copied_string = arena_push_struct(arena, String);
+	if (!copied_string) return NULL;
+	
+	copied_string->length = s->length;
+	copied_string->value = arena_push(arena, copied_string->length);	
+    if (!copied_string->value) return NULL;
+
+	memory_copy(copied_string->value, s->value, s->length);
+	
+	return copied_string;
+}
+
+String *string_copy_into (const String *string_to_copy, String *string_to_fill) {
+	if (!string_to_copy || !string_to_copy->value) { return string_to_fill; }
+
+	const u64 copy_length = xtd_min(string_to_copy->length, string_to_fill->length);
+	memory_copy(string_to_fill->value, string_to_copy->value, copy_length);
+	
+	string_to_fill->length = copy_length;
+	
+	return string_to_fill;
+}
+
+String *string_copy_slice (const String *string_to_copy, u64 start, u64 end) {
+	String slice_to_copy = string_slice(string_to_copy, start, end);
+	return string_copy(&slice_to_copy);
+}
+
+String *string_copy_slice_arena (Arena *arena, const String *string_to_copy, u64 start, u64 end) {
+	String slice_to_copy = string_slice(string_to_copy, start, end);
+	return string_copy_arena(arena, &slice_to_copy);
+}
+
+String *string_copy_slice_into (const String *string_to_copy, u64 start, u64 end, String *string_to_fill) {
+	String slice_to_copy = string_slice(string_to_copy, start, end);
+	return string_copy_into(&slice_to_copy, string_to_fill);
+}
+
+bool string_is_equal (const String *a, const String *b) {	
+    return (a->length == b->length) && (memory_compare(a->value, b->value, a->length) == 0);
+}
+
+u64 string_find_next_char (const String *s, char c) {
+	for (u64 index = 0; index < s->length; ++index) {
+		if (s->value[index] == c) {
+			return index;
+		}
+	}
+	return (u64) -1;
+}
+
+u64 string_find_last_char (const String *s, char c) {
+	for (u64 index = s->length; index-- > 0; ) {
+		if (s->value[index] == c) {
+			return index;
+		}
+	}
+	return (u64) -1;
+}
+
+u64 string_find_next_substring (const String *s, const String *substr) {
+	if (s->length < substr->length) {
+		return (u64) -1;
+	}
+	for (u64 index = 0; index <= s->length - substr->length; ++index) { 
+		String *s_slice = string_copy_slice(s, index, index + substr->length);
+		if (string_is_equal(s_slice, substr)) {
+			free(s_slice->value);
+			return index;
+		}
+		free(s_slice->value);
+	}
+	return (u64) -1;
+}
+
+u64 string_find_last_substring (const String *s, const String *substr) {
+	if (s->length < substr->length) {
+		return (u64) -1;
+	}
+
+	for (u64 index = s->length - substr->length; index-- > 0; ) { 
+		String *s_slice = string_copy_slice(s, index - substr->length, index);
+		if (string_is_equal(s_slice, substr)) {
+			free(s_slice->value);
+			return index;
+		}
+		free(s_slice->value);
+	}
+
+	return (u64) -1;
+}
 
 //=============================================================================
 // MULTITHREADING IMPLEMENTATION
 //=============================================================================
-
+/*
 // -- Thread ------------------------------------------------------------------
 
 #define THREAD_CREATE_ERROR -1
