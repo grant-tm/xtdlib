@@ -217,11 +217,11 @@ static inline void memory_zero (void *addr, u64 size) {
     #endif
 }
 
-static inline void memory_copy (void *dest, void *source, u64 size) {
+static inline void memory_copy (void *dest, const void *source, u64 size) {
 	memcpy(dest, source, size);
 }
 
-static inline i32 memory_compare (void *addr_a, void *addr_b, u64 size) {
+static inline i32 memory_compare (const void *addr_a, const void *addr_b, u64 size) {
     return size == 0 ? 0 : memcmp(addr_a, addr_b, size);
 }
 
@@ -231,6 +231,7 @@ static inline i32 memory_compare (void *addr_a, void *addr_b, u64 size) {
 	#define DefaultAlignment 8
 #endif
 
+#define memory_size_of(value) sizeof(value)
 #define memory_alignment_of(value) alignof(value)
 #define memory_align_as(value) alignas(value)
 static inline u64 memory_align_forward (u64 ptr, u64 alignment) {
