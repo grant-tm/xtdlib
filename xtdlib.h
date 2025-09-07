@@ -167,12 +167,12 @@ xtd_assert_fail (const char *condition, const char *message, const char *file, u
 #define xtd_ignore_unused(x) (void)(x)
 
 //=============================================================================
-// MEMORY DECLARATIONS
+// MEMORY DECLARATIONS 
 //=============================================================================
 
 // -- Memory Management -------------------------------------------------------
 
-static inline void *xtd_reserve_memory (u64 size) {
+static inline void *memory_reserve (u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         return VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_READWRITE);
     #else
@@ -181,7 +181,7 @@ static inline void *xtd_reserve_memory (u64 size) {
     #endif
 }
 
-static inline void *xtd_commit_reserved_memory (void *addr, u64 size) {
+static inline void *memory_commit_reserved (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         return VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE);
     #else
@@ -190,7 +190,10 @@ static inline void *xtd_commit_reserved_memory (void *addr, u64 size) {
     #endif
 }
 
-static inline void xtd_release_memory (void *addr, u64 size) {
+#define memory_allocate(size) malloc(size);
+#define memory_free(ptr) free(ptr);
+
+static inline void memory_release (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         xtd_ignore_unused(size);
         VirtualFree(addr, 0, MEM_RELEASE);
@@ -199,7 +202,9 @@ static inline void xtd_release_memory (void *addr, u64 size) {
     #endif
 }
 
-static inline void xtd_zero_memory (void *addr, u64 size) {
+#define memory_set(addr, value, size) memset((addr), (value), (size));
+
+static inline void memory_zero (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
         ZeroMemory(addr, size);
     #elif defined(__unix__) || defined(__APPLE__)
@@ -209,11 +214,11 @@ static inline void xtd_zero_memory (void *addr, u64 size) {
     #endif
 }
 
-static inline void xtd_copy_memory (void *dest, void *source, u64 size) {
+static inline void memory_copy (void *dest, void *source, u64 size) {
 	memcpy(dest, source, size);
 }
 
-static inline i32 xtd_compare_memory (void *addr_a, void *addr_b, u64 size) {
+static inline i32 memory_compare (void *addr_a, void *addr_b, u64 size) {
     return size == 0 ? 0 : memcmp(addr_a, addr_b, size);
 }
 
@@ -223,10 +228,9 @@ static inline i32 xtd_compare_memory (void *addr_a, void *addr_b, u64 size) {
 	#define DefaultAlignment 8
 #endif
 
-#define xtd_align_as(value) alignas(value)
-#define xtd_align_of(value) alignof(value)
-
-static inline u64 xtd_align_forward (u64 ptr, u64 alignment) {
+#define memory_alignment_of(value) alignof(value)
+#define memory_align_as(value) alignas(value)
+static inline u64 memory_align_forward (u64 ptr, u64 alignment) {
     u64 modulo = ptr % alignment;
     if (modulo != 0) {
         ptr += (alignment - modulo);
@@ -256,7 +260,7 @@ static inline void arena_clear(Arena *arena) {
 b32 arena_commit_memory (Arena *arena, u64 size);
 
 static inline void arena_release (Arena *arena) {
-    xtd_release_memory(arena->base, arena->committed);
+    memory_release(arena->base, arena->committed);
     arena->base = NULL;
     arena->used = 0;
     arena->committed = 0;
@@ -459,7 +463,7 @@ static inline void string_builder_arena_reserve (Arena *arena, StringBuilder *sb
     if (!new_data) return;     
 
     if (sb->buffer.length > 0) {
-        xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        memory_copy(new_data, sb->buffer.value, sb->buffer.length);
     }
 
     sb->buffer.value = new_data;
@@ -499,13 +503,13 @@ static inline void string_build_arena_format(Arena *arena, StringBuilder *sb, co
     if (required_memory > sb->capacity) {
         u64 new_capacity = required_memory * 2;
         char *new_data = arena_push(arena, new_capacity);
-        xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        memory_copy(new_data, sb->buffer.value, sb->buffer.length);
         if (!new_data) {
 			va_end(args);
 			return;
 		}
 		if (sb->buffer.length > 0) {
-            xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+            memory_copy(new_data, sb->buffer.value, sb->buffer.length);
         }
 		sb->buffer.value = new_data;
         sb->capacity = new_capacity;
@@ -539,13 +543,13 @@ static inline void string_build_malloc_format(StringBuilder *sb, const char *for
     if (required_memory > sb->capacity) {
         u64 new_capacity = required_memory * 2;
         char *new_data = realloc(sb->buffer.value, new_capacity);
-        xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+        memory_copy(new_data, sb->buffer.value, sb->buffer.length);
         if (!new_data) {
 			va_end(args);
 			return;
 		}
 		if (sb->buffer.length > 0) {
-            xtd_copy_memory(new_data, sb->buffer.value, sb->buffer.length);
+            memory_copy(new_data, sb->buffer.value, sb->buffer.length);
         }
 		sb->buffer.value = new_data;
         sb->capacity = new_capacity;
@@ -1362,7 +1366,7 @@ b32 _arena_init (Arena *arena) {
     xtd_assert_message(arena != NULL, "[_arena_init]: Cannot initialize NULL arena\n");
     if (!arena) return false;
     
-    arena->base = xtd_reserve_memory(ARENA_DEFAULT_RESERVE_SIZE);
+	arena->base = memory_reserve(ARENA_DEFAULT_RESERVE_SIZE);
     
     xtd_assert_message(arena->base != NULL, "[_arena_init]: Arena base is NULL after reserving memory\n");
     if (!arena->base) return false;
@@ -1379,9 +1383,9 @@ b32 arena_commit_memory (Arena *arena, u64 size) {
     xtd_assert_message(arena->base != NULL, "[arena_commit_memory]: Arena base is NULL\n");
     if (!arena || !arena->base) return false;
 
-    u64 commit_size = xtd_align_forward(size, (u64) ARENA_COMMIT_CHUNK_SIZE);
+    u64 commit_size = memory_align_forward(size, (u64) ARENA_COMMIT_CHUNK_SIZE);
     void *commit_ptr = (u8 *)arena->base + arena->committed;
-    void *result = xtd_commit_reserved_memory(commit_ptr, commit_size);
+    void *result = memory_commit_reserved(commit_ptr, commit_size);
     
     if (result)
     {
@@ -1401,7 +1405,7 @@ void *_arena_push (Arena *arena, u64 size, u64 alignment, b32 clear_to_zero) {
     }
 
     u64 current_ptr = (u64) arena->base + arena->used;
-    u64 aligned_ptr = xtd_align_forward(current_ptr, alignment);
+    u64 aligned_ptr = memory_align_forward(current_ptr, alignment);
     u64 padding = aligned_ptr - current_ptr;
     u64 total_size = padding + size;
 
@@ -1414,7 +1418,7 @@ void *_arena_push (Arena *arena, u64 size, u64 alignment, b32 clear_to_zero) {
 
     void *result = (void *)aligned_ptr;
     if (clear_to_zero) {
-        xtd_zero_memory(result, size);
+        memory_zero(result, size);
     }
 
     arena->used = (aligned_ptr + size) - (u64)arena->base;
