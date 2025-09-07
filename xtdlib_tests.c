@@ -1259,387 +1259,574 @@ TEST(MapMock, "Storage", "Map") {
 // String Module
 //=============================================================================
 
-// -- String Component --------------------------------------------------------
-
-TEST(StringConstruct, "String", "String") {
+TEST(StringSlice, "String", "String") {
 	const char *text = "Hello, World!";
-	String s = string_construct(text);
 
-	if (s.value == NULL) {
-		test_case_record_error(&StringConstructTest, TEST_RESULT_NULL_VALUE,
-            "string_construct returned NULL", "");
+	String s;
+	s.value = malloc(13);
+	memory_copy(s.value, (void *) text, 13);
+	s.length = 13;
+
+	String slice = string_slice(&s, 0, 5);
+	if (slice.value == NULL) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_NULL_VALUE,
+			"string slice is NULL", "");
 	}
-	if (s.length != strlen(text)) {
-		test_case_record_error(&StringConstructTest, TEST_RESULT_INCORRECT_VALUE,
-			"Constructed string's length does not match text length",
-			"\t-- Expected: %d\n\t-- Actual: %d", (i32) s.length, (i32) strlen(text));
+	if (slice.length != 5) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_INVALID_STATE,
+			"string slice length is incorrect", 
+			"\t-- Expected: 5\n\t-- Actual %llu", slice.length);
+	}
+	if (memory_compare(slice.value, s.value, 5) != 0) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
+			"string slice contains incorrect memory",
+			"\t-- Expected: Hello\n\t-- Actual %s", slice.value);
+	}
+
+	slice = string_slice(&s, 7, 12);
+	if (slice.value == NULL) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_NULL_VALUE,
+			"string slice is NULL", "");
+	}
+	if (slice.length != 5) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_INVALID_STATE,
+			"string slice length is incorrect", 
+			"\t-- Expected: 5\n\t-- Actual %llu", slice.length);
+	}
+	if (memory_compare(slice.value, s.value + 7, 5) != 0) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
+			"string slice contains incorrect memory",
+			"\t-- Expected: World\n\t-- Actual %s", slice.value);
+	}
+
+	slice = string_slice(&s, 0, 40);
+	if (slice.value == NULL) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_NULL_VALUE,
+			"string slice is NULL", "");
+	}
+	if (slice.length != 13) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_INVALID_STATE,
+			"string slice length is incorrect", 
+			"\t-- Expected: 13\n\t-- Actual %llu", slice.length);
+	}
+	if (memory_compare(slice.value, s.value, 13) != 0) {
+		test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
+			"string slice contains incorrect memory",
+			"\t-- Expected: Hello, World!\n\t-- Actual %s", slice.value);
 	}
 
 	return 0;
 }
 
-TEST(StringMallocCopy, "String", "String") {
-    const char *text = "Hello, World!";
-    String s = string_construct(text);
-    
-    String copy = string_malloc_copy(s);
+TEST(StringCopy, "String", "String") {
+	const char *text = "Hello, World!";
 
-    if (!copy.value) {
-        test_case_record_error(&StringMallocCopyTest, TEST_RESULT_NULL_VALUE,
-            "string_malloc_copy returned NULL", "");
-    }
-    if (!string_memory_is_equal(s, copy)) {
-        test_case_record_error(&StringMallocCopyTest, TEST_RESULT_INCORRECT_VALUE,
-            "Copied string does not match original",
-            "\t-- Original: %.*s\n\t-- Copy: %.*s", (int)s.length, s.value, (int)copy.length, copy.value);
-    }
+	String s;
+	s.value = malloc(13);
+	memory_copy(s.value, (void *) text, 13);
+	s.length = 13;
 
-    string_free(copy);
-    return 0;
+	String *copy = string_copy(&s);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopyTest, TEST_RESULT_NULL_VALUE,
+			"string copy is NULL", "");
+	}
+	if (copy->length != s.length) {
+		test_case_record_error(&StringCopyTest, TEST_RESULT_INVALID_STATE,
+			"string copy length is incorrect", 
+			"\t-- Expected: %llu\n\t-- Actual %llu", s.length, copy->length);
+	}
+	if (memory_compare(copy->value, s.value, s.length) != 0) {
+		test_case_record_error(&StringCopyTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy contains incorrect memory",
+			"\t-- Expected: %s\n\t-- Actual %s", s.value, copy->value);
+	}
+	if (copy->value == s.value) {
+		test_case_record_error(&StringCopyTest, TEST_RESULT_INVALID_STATE,
+			"string copy points to the same memory as the original", "");
+	}
+
+	String empty;
+	empty.value = malloc(0);
+	empty.length = 0;
+
+	String *copy_empty = string_copy(&empty);
+	if (copy_empty->value == NULL && empty.length > 0) {
+		test_case_record_error(&StringCopyTest, TEST_RESULT_NULL_VALUE,
+			"string copy (empty) is NULL", "");
+	}
+	if (copy_empty->length != 0) {
+		test_case_record_error(&StringCopyTest, TEST_RESULT_INVALID_STATE,
+			"string copy (empty) length is incorrect", 
+			"\t-- Expected: 0\n\t-- Actual %llu", copy_empty->length);
+	}
+
+	return 0;
 }
 
-TEST(StringArenaCopy, "String", "String") {
+
+TEST(StringCopyArena, "String", "String") {
 	const char *text = "Hello, World!";
-	String s = string_construct(text);
 
 	Arena arena = {0};
 
-	String copy = string_arena_copy(&arena, s);
+	String s;
+	s.value = arena_push(&arena, 13);
+	memory_copy(s.value, (void *) text, 13);
+	s.length = 13;
 
-	if (!copy.value) {
-        test_case_record_error(&StringArenaCopyTest, TEST_RESULT_NULL_VALUE,
-            "string_malloc_copy returned NULL", "");
-    }
-    if (!string_memory_is_equal(s, copy)) {
-        test_case_record_error(&StringArenaCopyTest, TEST_RESULT_INCORRECT_VALUE,
-            "Copied string does not match original",
-            "\t-- Original: %.*s\n\t-- Copy: %.*s", (int)s.length, s.value, (int)copy.length, copy.value);
-    }
+	String *copy = string_copy_arena(&arena, &s);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_NULL_VALUE,
+			"string copy is NULL", "");
+	}
+	if (copy->length != s.length) {
+		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy length is incorrect", 
+			"\t-- Expected: %llu\n\t-- Actual %llu", s.length, copy->length);
+	}
+	if (memory_compare(copy->value, s.value, s.length) != 0) {
+		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy contains incorrect memory",
+			"\t-- Expected: %s\n\t-- Actual %s", s.value, copy->value);
+	}
+	if (copy->value == s.value) {
+		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy points to the same memory as the original", "");
+	}
 
-    arena_release(&arena);
+	String empty;
+	empty.value = arena_push(&arena, 0);
+	empty.length = 0;
+
+	String *copy_empty = string_copy_arena(&arena, &empty);
+	if (copy_empty->value == NULL && empty.length > 0) {
+		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_NULL_VALUE,
+			"string copy (empty) is NULL", "");
+	}
+	if (copy_empty->length != 0) {
+		test_case_record_error(&StringCopyArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy (empty) length is incorrect", 
+			"\t-- Expected: 0\n\t-- Actual %llu", copy_empty->length);
+	}
+
 	return 0;
 }
 
-TEST(StringSlice, "String", "String") {
-    const char *text = "abcdefghijklmnopqrstuvwxyz";
-    String s = string_construct(text);
+TEST(StringCopySlice, "String", "String") {
+	const char *text = "Hello, World!";
 
-    String slice = string_slice(s, 5, 10);
-    const char *expected = "fghij";
+	String s;
+	s.value = malloc(13);
+	memory_copy(s.value, (void *) text, 13);
+	s.length = 13;
 
-    if (slice.length != 5) {
-        test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
-            "Slice length incorrect",
-            "\t-- Expected: 5\n\t-- Actual: %llu", slice.length);
-    }
-    if (memcmp(slice.value, expected, slice.length) != 0) {
-        test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
-            "Slice content incorrect",
-            "\t-- Expected: %.*s\n\t-- Actual: %.*s", (int)slice.length, expected, (int)slice.length, slice.value);
-    }
+	// Copy first 5 chars: "Hello"
+	String *copy = string_copy_slice(&s, 0, 5);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice is NULL", "");
+	}
+	if (copy->length != 5) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice length is incorrect",
+			"\t-- Expected: 5\n\t-- Actual %llu", copy->length);
+	}
+	if (memory_compare(copy->value, s.value, 5) != 0) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy slice contains incorrect memory",
+			"\t-- Expected: Hello\n\t-- Actual %s", copy->value);
+	}
+	if (copy->value == s.value) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice points to same memory as original", "");
+	}
 
-    // Edge case: start > end
-    String slice2 = string_slice(s, 10, 5);
-    if (slice2.length != 0) {
-        test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
-            "Slice with start > end should have length 0",
-            "\t-- Actual length: %llu", slice2.length);
-    }
+	// Copy "World"
+	copy = string_copy_slice(&s, 7, 12);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice is NULL", "");
+	}
+	if (copy->length != 5) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice length is incorrect",
+			"\t-- Expected: 5\n\t-- Actual %llu", copy->length);
+	}
+	if (memory_compare(copy->value, s.value + 7, 5) != 0) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy slice contains incorrect memory",
+			"\t-- Expected: World\n\t-- Actual %s", copy->value);
+	}
+	if (copy->value == s.value + 7) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice points to same memory as original slice", "");
+	}
 
-    // Edge case: end beyond string
-    String slice3 = string_slice(s, 20, 30);
-    if (slice3.length != 6) {
-        test_case_record_error(&StringSliceTest, TEST_RESULT_INCORRECT_VALUE,
-            "Slice end beyond string length incorrect",
-            "\t-- Expected: 6\n\t-- Actual: %llu", slice3.length);
-    }
+	// Copy past-the-end (should clamp to full string)
+	copy = string_copy_slice(&s, 0, 40);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice is NULL", "");
+	}
+	if (copy->length != 13) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice length is incorrect",
+			"\t-- Expected: 13\n\t-- Actual %llu", copy->length);
+	}
+	if (memory_compare(copy->value, s.value, 13) != 0) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy slice contains incorrect memory",
+			"\t-- Expected: Hello, World!\n\t-- Actual %s", copy->value);
+	}
 
-    return 0;
-}
+	// Empty slice
+	copy = string_copy_slice(&s, 5, 5);
+	if (copy->value == NULL && copy->length != 0) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice (empty) is NULL", "");
+	}
+	if (copy->length != 0) {
+		test_case_record_error(&StringCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice (empty) length is incorrect",
+			"\t-- Expected: 0\n\t-- Actual %llu", copy->length);
+	}
 
-TEST(StringMemoryIsEqual, "String", "String") {
-    String a = string_construct("TestString");
-    String b = string_construct("TestString");
-    String c = string_construct("OtherString");
-
-    if (!string_memory_is_equal(a, b)) {
-        test_case_record_error(&StringMemoryIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
-            "Strings should be equal", "");
-    }
-    if (string_memory_is_equal(a, c)) {
-        test_case_record_error(&StringMemoryIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
-            "Strings should not be equal", "");
-    }
-
-    return 0;
-}
-
-// -- Builder Component -------------------------------------------------------
-
-TEST(StringBuilderReserve, "String", "Builder") {
-    StringBuilder sb = {0};
-    sb.buffer.value = NULL;
-    sb.buffer.length = 0;
-    sb.capacity = 0;
-
-    string_builder_reserve(&sb, 128);
-    if (sb.capacity < 128) {
-        test_case_record_error(&StringBuilderReserveTest, TEST_RESULT_INCORRECT_VALUE,
-            "Capacity not correctly set", "\t-- Actual: %llu", sb.capacity);
-    }
-	
-    // Append data to see if buffer usable
-    strcpy_s(sb.buffer.value, 6, "Hello");
-	sb.buffer.length = strlen(sb.buffer.value);
-    if (sb.buffer.length != 5) {
-        test_case_record_error(&StringBuilderReserveTest, TEST_RESULT_INCORRECT_VALUE,
-            "Buffer length mismatch", "\t-- Actual: %llu", sb.buffer.length);
-    }
-
-    free(sb.buffer.value);
 	return 0;
 }
 
-TEST(StringBuilderClear, "String", "Builder") {
-    StringBuilder sb = {0};
-    sb.buffer.value = malloc(32);
-    strcpy_s(sb.buffer.value, 32, "Hello, World!");
-    sb.buffer.length = strlen(sb.buffer.value);
-    sb.capacity = 32;
+TEST(StringCopySliceArena, "String", "String") {
+	const char *text = "Hello, World!";
 
-    string_builder_clear(&sb);
-    if (sb.buffer.length != 0) {
-        test_case_record_error(&StringBuilderClearTest, TEST_RESULT_INCORRECT_VALUE,
-            "Buffer length not cleared", "\t-- Actual: %llu", sb.buffer.length);
-    } 
+	Arena arena = {0};
 
-    free(sb.buffer.value);
+	String s;
+	s.value = arena_push(&arena, 13);
+	memory_copy(s.value, (void *) text, 13);
+	s.length = 13;
+
+	// Copy first 5 chars: "Hello"
+	String *copy = string_copy_slice_arena(&arena, &s, 0, 5);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice is NULL", "");
+	}
+	if (copy->length != 5) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice length is incorrect",
+			"\t-- Expected: 5\n\t-- Actual %llu", copy->length);
+	}
+	if (memory_compare(copy->value, s.value, 5) != 0) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy slice contains incorrect memory",
+			"\t-- Expected: Hello\n\t-- Actual %s", copy->value);
+	}
+	if (copy->value == s.value) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice points to same memory as original", "");
+	}
+
+	// Copy "World"
+	copy = string_copy_slice_arena(&arena, &s, 7, 12);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice is NULL", "");
+	}
+	if (copy->length != 5) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice length is incorrect",
+			"\t-- Expected: 5\n\t-- Actual %llu", copy->length);
+	}
+	if (memory_compare(copy->value, s.value + 7, 5) != 0) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy slice contains incorrect memory",
+			"\t-- Expected: World\n\t-- Actual %s", copy->value);
+	}
+	if (copy->value == s.value + 7) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice points to same memory as original slice", "");
+	}
+
+	// Copy past-the-end (should clamp to full string)
+	copy = string_copy_slice_arena(&arena, &s, 0, 40);
+	if (copy->value == NULL) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice is NULL", "");
+	}
+	if (copy->length != 13) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice length is incorrect",
+			"\t-- Expected: 13\n\t-- Actual %llu", copy->length);
+	}
+	if (memory_compare(copy->value, s.value, 13) != 0) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INCORRECT_VALUE,
+			"string copy slice contains incorrect memory",
+			"\t-- Expected: Hello, World!\n\t-- Actual %s", copy->value);
+	}
+
+	// Empty slice
+	copy = string_copy_slice_arena(&arena, &s, 5, 5);
+	if (copy->value == NULL && copy->length != 0) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_NULL_VALUE,
+			"string copy slice (empty) is NULL", "");
+	}
+	if (copy->length != 0) {
+		test_case_record_error(&StringCopySliceArenaTest, TEST_RESULT_INVALID_STATE,
+			"string copy slice (empty) length is incorrect",
+			"\t-- Expected: 0\n\t-- Actual %llu", copy->length);
+	}
+
+	return 0;
+}
+
+TEST(StringIsEqual, "String", "String") {
+	const char *text1 = "Hello, World!";
+	const char *text2 = "Hello, World!";
+	const char *text3 = "Hello, world!"; // differs by case
+	const char *text4 = "Hello";
+
+	String s1, s2, s3, s4, empty;
+
+	// Setup strings
+	s1.value = malloc(13);
+	memory_copy(s1.value, (void *) text1, 13);
+	s1.length = 13;
+
+	s2.value = malloc(13);
+	memory_copy(s2.value, (void *) text2, 13);
+	s2.length = 13;
+
+	s3.value = malloc(13);
+	memory_copy(s3.value, (void *) text3, 13);
+	s3.length = 13;
+
+	s4.value = malloc(5);
+	memory_copy(s4.value, (void *) text4, 5);
+	s4.length = 5;
+
+	empty.value = malloc(0);
+	empty.length = 0;
+
+	// Identical strings
+	if (!string_is_equal(&s1, &s2)) {
+		test_case_record_error(&StringIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
+			"identical strings not equal", "");
+	}
+
+	// Different length
+	if (string_is_equal(&s1, &s4)) {
+		test_case_record_error(&StringIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
+			"strings of different length reported equal", "");
+	}
+
+	// Same length, different content
+	if (string_is_equal(&s1, &s3)) {
+		test_case_record_error(&StringIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
+			"strings with different content reported equal", "");
+	}
+
+	// Both empty
+	if (!string_is_equal(&empty, &empty)) {
+		test_case_record_error(&StringIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
+			"empty strings not equal", "");
+	}
+
+	// One empty, one non-empty
+	if (string_is_equal(&s1, &empty)) {
+		test_case_record_error(&StringIsEqualTest, TEST_RESULT_INCORRECT_VALUE,
+			"non-empty and empty string reported equal", "");
+	}
+
+	return 0;
+}
+
+TEST(StringFindNextChar, "String", "String") {
+	const char *text = "Hello, World!";
+
+	String s;
+	s.value = malloc(13);
+	memory_copy(s.value, (void *) text, 13);
+	s.length = 13;
+
+	// Character at start ('H')
+	u64 index = string_find_next_char(&s, 'H');
+	if (index != 0) {
+		test_case_record_error(&StringFindNextCharTest, TEST_RESULT_INCORRECT_VALUE,
+			"failed to find character at start",
+			"\t-- Expected: 0\n\t-- Actual %llu", index);
+	}
+
+	// Character in middle ('W')
+	index = string_find_next_char(&s, 'W');
+	if (index != 7) {
+		test_case_record_error(&StringFindNextCharTest, TEST_RESULT_INCORRECT_VALUE,
+			"failed to find character in middle",
+			"\t-- Expected: 7\n\t-- Actual %llu", index);
+	}
+
+	// Character at end ('!')
+	index = string_find_next_char(&s, '!');
+	if (index != 12) {
+		test_case_record_error(&StringFindNextCharTest, TEST_RESULT_INCORRECT_VALUE,
+			"failed to find character at end",
+			"\t-- Expected: 12\n\t-- Actual %llu", index);
+	}
+
+	// Character not present ('x')
+	index = string_find_next_char(&s, 'x');
+	if (index != (u64)-1) {
+		test_case_record_error(&StringFindNextCharTest, TEST_RESULT_INCORRECT_VALUE,
+			"not-found character should return -1",
+			"\t-- Expected: %llu\n\t-- Actual %llu", (u64)-1, index);
+	}
+
+	// Empty string
+	String empty;
+	empty.value = malloc(0);
+	empty.length = 0;
+
+	index = string_find_next_char(&empty, 'a');
+	if (index != (u64)-1) {
+		test_case_record_error(&StringFindNextCharTest, TEST_RESULT_INCORRECT_VALUE,
+			"search in empty string should return -1",
+			"\t-- Expected: %llu\n\t-- Actual %llu", (u64)-1, index);
+	}
+
+	return 0;
+}
+
+TEST(StringFindLastChar, "String", "String") {
+    const char *text = "Hello, World!";
+
+    String s;
+    s.value = malloc(13);
+    memory_copy(s.value, (void *) text, 13);
+    s.length = 13;
+
+    // Character at start ('H')
+    u64 index = string_find_last_char(&s, 'H');
+    if (index != 0) {
+        test_case_record_error(&StringFindLastCharTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find last character at start",
+            "\t-- Expected: 0\n\t-- Actual %llu", index);
+    }
+
+    // Character in middle with multiple occurrences ('l' -> last at index 10)
+    index = string_find_last_char(&s, 'l');
+    if (index != 10) {
+        test_case_record_error(&StringFindLastCharTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find last occurrence in middle",
+            "\t-- Expected: 10\n\t-- Actual %llu", index);
+    }
+
+    // Character at end ('!')
+    index = string_find_last_char(&s, '!');
+    if (index != 12) {
+        test_case_record_error(&StringFindLastCharTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find last character at end",
+            "\t-- Expected: 12\n\t-- Actual %llu", index);
+    }
+
+    // Character not present ('x')
+    index = string_find_last_char(&s, 'x');
+    if (index != (u64)-1) {
+        test_case_record_error(&StringFindLastCharTest, TEST_RESULT_INCORRECT_VALUE,
+            "not-found character should return -1",
+            "\t-- Expected: %llu\n\t-- Actual %llu", (u64)-1, index);
+    }
+
+    // Empty string
+    String empty;
+    empty.value = malloc(0);
+    empty.length = 0;
+
+    index = string_find_last_char(&empty, 'a');
+    if (index != (u64)-1) {
+        test_case_record_error(&StringFindLastCharTest, TEST_RESULT_INCORRECT_VALUE,
+            "search in empty string should return -1",
+            "\t-- Expected: %llu\n\t-- Actual %llu", (u64)-1, index);
+    }
+
     return 0;
 }
 
-TEST(StringBuildArenaFormat, "String", "Builder") {
-    Arena arena = {0};
-    StringBuilder sb = {0};
-    sb.buffer.value = arena_push(&arena, 16); 
-    sb.buffer.length = 0;
-    sb.capacity = 16;
+TEST(StringFindNextSubstring, "String", "String") {
+    const char *text = "Hello, World!";
+    const char *needle1 = "Hello";
+    const char *needle2 = "World";
+    const char *needle3 = "lo, W";
+    const char *needle4 = "NotFound";
 
-    string_build_arena_format(&arena, &sb, "Hello %s", "World");
+    String s;
+    s.value = malloc(13);
+    memory_copy(s.value, (void *) text, 13);
+    s.length = 13;
 
-    if (sb.buffer.length != 11) { // "Hello World" = 11 chars
-        test_case_record_error(&StringBuildArenaFormatTest, TEST_RESULT_INCORRECT_VALUE,
-            "Buffer length incorrect", "\t-- Actual: %llu", sb.buffer.length);
+    String sub1, sub2, sub3, sub4;
+
+    sub1.value = malloc(5);
+    memory_copy(sub1.value, (void *) needle1, 5);
+    sub1.length = 5;
+
+    sub2.value = malloc(5);
+    memory_copy(sub2.value, (void *) needle2, 5);
+    sub2.length = 5;
+
+    sub3.value = malloc(5);
+    memory_copy(sub3.value, (void *) needle3, 5);
+    sub3.length = 5;
+
+    sub4.value = malloc(8);
+    memory_copy(sub4.value, (void *) needle4, 8);
+    sub4.length = 8;
+
+    // Substring at start
+    u64 index = string_find_next_substring(&s, &sub1);
+    if (index != 0) {
+        test_case_record_error(&StringFindNextSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find substring at start",
+            "\t-- Expected: 0\n\t-- Actual %llu", index);
     }
 
-    // Append more to force capacity growth
-    string_build_arena_format(&arena, &sb, " %d %f", 42, 3.14f);
-
-    if (sb.buffer.length <= 11) {
-        test_case_record_error(&StringBuildArenaFormatTest, TEST_RESULT_INCORRECT_VALUE,
-            "Buffer not appended correctly", "\t-- Actual: %llu", sb.buffer.length);
+    // Substring in middle 
+	index = string_find_next_substring(&s, &sub3);
+    if (index != 3) {
+        test_case_record_error(&StringFindNextSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find substring in middle",
+            "\t-- Expected: 3\n\t-- Actual %llu", index);
     }
 
-    return 0;
-}
-
-TEST(StringBuildMallocFormat, "String", "Builder") {
-    StringBuilder sb = {0};
-    sb.buffer.value = NULL;
-    sb.buffer.length = 0;
-    sb.capacity = 0;
-
-    string_build_malloc_format(&sb, "Test %d", 123);
-
-    if (sb.buffer.length != strlen("Test 123")) {
-        test_case_record_error(&StringBuildMallocFormatTest, TEST_RESULT_INCORRECT_VALUE,
-            "Buffer length incorrect", "\t-- Actual: %llu", sb.buffer.length);
+    // Substring at end
+    index = string_find_next_substring(&s, &sub2);
+    if (index != 7) {
+        test_case_record_error(&StringFindNextSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "failed to find substring at end",
+            "\t-- Expected: 7\n\t-- Actual %llu", index);
     }
 
-    // Append more to force realloc
-    string_build_malloc_format(&sb, " %s", "MoreData");
-
-    if (sb.buffer.length <= 7) {
-        test_case_record_error(&StringBuildMallocFormatTest, TEST_RESULT_INCORRECT_VALUE,
-            "Buffer not appended correctly", "\t-- Actual: %llu", sb.buffer.length);
+    // Substring not present
+    index = string_find_next_substring(&s, &sub4);
+    if (index != (u64)-1) {
+        test_case_record_error(&StringFindNextSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "not-found substring should return -1",
+            "\t-- Expected: %llu\n\t-- Actual %llu", (u64)-1, index);
     }
 
-    free(sb.buffer.value);
-    return 0;
-}
-
-// -- Conversion Component ----------------------------------------------------
-
-TEST(Utf8Iterator, "String", "Conversion") {
-    const char *text = "a\u00E9\u20AC"; // a, é (2-byte), € (3-byte)
-    String s = string_construct(text);
-
-    u64 index = 0;
-    UTF8Iterator it = utf8_next(s, &index);
-    if (it.codepoint != 'a') {
-        test_case_record_error(&Utf8IteratorTest, TEST_RESULT_INCORRECT_VALUE,
-            "First codepoint incorrect", "\t-- Expected: %u\n\t-- Actual: %u", (u32)'a', it.codepoint);
-    }
-
-    it = utf8_next(s, &index);
-    if (it.codepoint != 0xE9) {
-        test_case_record_error(&Utf8IteratorTest, TEST_RESULT_INCORRECT_VALUE,
-            "Second codepoint incorrect", "\t-- Expected: 0xE9\n\t-- Actual: %u", it.codepoint);
-    }
-
-    it = utf8_next(s, &index);
-    if (it.codepoint != 0x20AC) {
-        test_case_record_error(&Utf8IteratorTest, TEST_RESULT_INCORRECT_VALUE,
-            "Third codepoint incorrect", "\t-- Expected: 0x20AC\n\t-- Actual: %u", it.codepoint);
-    }
-
-    it = utf8_next(s, &index);
-    if (it.codepoint != 0) {
-        test_case_record_error(&Utf8IteratorTest, TEST_RESULT_INCORRECT_VALUE,
-            "Iterator end not detected", "\t-- Actual: %u", it.codepoint);
+    // Empty substring
+    String empty;
+    empty.value = malloc(0);
+    empty.length = 0;
+    index = string_find_next_substring(&s, &empty);
+    if (index != 0) {
+        test_case_record_error(&StringFindNextSubstringTest, TEST_RESULT_INCORRECT_VALUE,
+            "empty substring should match at index 0",
+            "\t-- Expected: 0\n\t-- Actual %llu", index);
     }
 
     return 0;
 }
 
 
-TEST(StringToCStrMalloc, "String", "Conversion") {
-    const char *text = "Hello, 世界!";
-    String s = string_construct(text);
-
-    char *cstr = string_to_cstr_malloc(s);
-
-    if (!cstr) {
-        test_case_record_error(&StringToCStrMallocTest, TEST_RESULT_NULL_VALUE,
-            "string_to_cstr_malloc returned NULL", "");
-    }
-    if (strlen(cstr) != s.length) {
-        test_case_record_error(&StringToCStrMallocTest, TEST_RESULT_INCORRECT_VALUE,
-            "C string length mismatch",
-            "\t-- Expected: %llu\n\t-- Actual: %zu", s.length, strlen(cstr));
-    }
-    if (memcmp(cstr, s.value, s.length) != 0) {
-        test_case_record_error(&StringToCStrMallocTest, TEST_RESULT_INCORRECT_VALUE,
-            "C string content mismatch",
-            "\t-- Expected: %.*s\n\t-- Actual: %s", (int)s.length, s.value, cstr);
-    }
-
-    free(cstr);
-    return 0;
-}
-
-TEST(StringToCStrArena, "String", "Conversion") {
-    const char *text = "Hello, 世界!";
-    String s = string_construct(text);
-    Arena arena = {0};
-
-    char *cstr = string_to_cstr_arena(&arena, s);
-
-    if (!cstr) {
-        test_case_record_error(&StringToCStrArenaTest, TEST_RESULT_NULL_VALUE,
-            "string_to_cstr_arena returned NULL", "");
-    }
-    if (strlen(cstr) != s.length) {
-        test_case_record_error(&StringToCStrArenaTest, TEST_RESULT_INCORRECT_VALUE,
-            "C string length mismatch",
-            "\t-- Expected: %llu\n\t-- Actual: %zu", s.length, strlen(cstr));
-    }
-    if (memcmp(cstr, s.value, s.length) != 0) {
-        test_case_record_error(&StringToCStrArenaTest, TEST_RESULT_INCORRECT_VALUE,
-            "C string content mismatch",
-            "\t-- Expected: %.*s\n\t-- Actual: %s", (int)s.length, s.value, cstr);
-    }
-
-    arena_release(&arena);
-    return 0;
-}
-
-TEST(StringUtf8ToWcharMalloc, "String", "Conversion") {
-    const char *text = "Hello, 世界!";
-    String s = string_construct(text);
-    StringBuilder sb = {0};
-
-    string_utf8_to_wchar_malloc(s, &sb);
-
-    if (!sb.buffer.value) {
-        test_case_record_error(&StringUtf8ToWcharMallocTest, TEST_RESULT_NULL_VALUE,
-            "string_utf8_to_wchar_malloc returned NULL", "");
-    }
-    if (sb.buffer.length == 0) {
-        test_case_record_error(&StringUtf8ToWcharMallocTest, TEST_RESULT_INCORRECT_VALUE,
-            "WChar buffer length is 0", "");
-    }
-
-    free(sb.buffer.value);
-    return 0;
-}
-
-TEST(StringUtf8ToWcharArena, "String", "Conversion") {
-    const char *text = "Hello, 世界!";
-    String s = string_construct(text);
-    StringBuilder sb = {0};
-    Arena arena = {0};
-
-    string_utf8_to_wchar_arena(&arena, s, &sb);
-
-    if (!sb.buffer.value) {
-        test_case_record_error(&StringUtf8ToWcharArenaTest, TEST_RESULT_NULL_VALUE,
-            "string_utf8_to_wchar_arena returned NULL", "");
-    }
-    if (sb.buffer.length == 0) {
-        test_case_record_error(&StringUtf8ToWcharArenaTest, TEST_RESULT_INCORRECT_VALUE,
-            "WChar buffer length is 0", "");
-    }
-
-    arena_release(&arena);
-    return 0;
-}
-
-TEST(StringFromWcharMalloc, "String", "Conversion") {
-    wchar_t wtext[] = L"Hello, 世界!";
-    u64 length = sizeof(wtext)/sizeof(wchar_t) - 1;
-
-    String s = string_from_wchar_malloc(wtext, length);
-
-    if (!s.value) {
-        test_case_record_error(&StringFromWcharMallocTest, TEST_RESULT_NULL_VALUE,
-            "string_from_wchar_malloc returned NULL", "");
-    }
-    if (s.length == 0) {
-        test_case_record_error(&StringFromWcharMallocTest, TEST_RESULT_INCORRECT_VALUE,
-            "Converted string has length 0", "");
-    }
-
-    // Round-trip check
-    char *cstr = string_to_cstr_malloc(s);
-    if (!cstr || memcmp(cstr, s.value, s.length) != 0) {
-        test_case_record_error(&StringFromWcharMallocTest, TEST_RESULT_INCORRECT_VALUE,
-            "Round-trip conversion mismatch", "");
-    }
-
-    free(cstr);
-    free(s.value);
-    return 0;
-}
-
-TEST(StringFromWcharArena, "String", "Conversion") {
-    wchar_t wtext[] = L"Hello, 世界!";
-    u64 length = sizeof(wtext)/sizeof(wchar_t) - 1;
-    Arena arena = {0};
-
-    String s = string_from_wchar_arena(&arena, wtext, length);
-
-    if (!s.value) {
-        test_case_record_error(&StringFromWcharArenaTest, TEST_RESULT_NULL_VALUE,
-            "string_from_wchar_arena returned NULL", "");
-    }
-    if (s.length == 0) {
-        test_case_record_error(&StringFromWcharArenaTest, TEST_RESULT_INCORRECT_VALUE,
-            "Converted string has length 0", "");
-    }
-
-    arena_release(&arena);
-    return 0;
-}
 
 //=============================================================================
 // Math Module
