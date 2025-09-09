@@ -2074,12 +2074,15 @@ TEST(StringFromWStrInto, "String", "Conversion") {
     String s3;
 
     // Allocate buffers
-    s1.value = malloc(20); s1.length = 20;
-    s2.value = malloc(5);  s2.length = 5;
-    s3.value = NULL;       s3.length = 10;
+    s1.value = malloc(20); 
+	s1.length = 0;
+    s2.value = malloc(5);  
+	s2.length = 0;
+    s3.value = NULL;       
+	s3.length = 0;
 
     // Normal copy: text shorter than buffer
-    string_from_wstr_into(text1, 13, &s1);
+    string_from_wstr_into(text1, 13, &s1, 20);
     if (s1.length != 13) {
         test_case_record_error(&StringFromWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
             "failed to copy wchar string into larger buffer: wrong length",
@@ -2094,7 +2097,7 @@ TEST(StringFromWStrInto, "String", "Conversion") {
     }
 
     // Copy into smaller buffer: only copy fits
-    string_from_wstr_into(text1, 13, &s2);
+    string_from_wstr_into(text1, 13, &s2, 5);
     if (s2.length != 5) {
         test_case_record_error(&StringFromWStrIntoTest, TEST_RESULT_INCORRECT_VALUE,
             "failed to copy wchar string into smaller buffer: wrong length",
@@ -2109,9 +2112,9 @@ TEST(StringFromWStrInto, "String", "Conversion") {
     }
 
     // NULL input string: should do nothing (no crash)
-    string_from_wstr_into(text3, 0, &s1);
-    string_from_wstr_into(text1, 13, NULL);
-    string_from_wstr_into(text1, 13, &s3);
+    string_from_wstr_into(text3, 0, &s1, 20);
+    string_from_wstr_into(text1, 13, NULL, 5);
+    string_from_wstr_into(text1, 13, &s3, 0);
 
     free(s1.value);
     free(s2.value);
