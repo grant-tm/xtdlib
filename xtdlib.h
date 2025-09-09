@@ -462,7 +462,7 @@ void string_to_cstr_into (const String *string, char *cstr, u64 cstr_size);
 
 String string_from_wstr (const wchar *wstr, u64 wstr_size);
 String *string_from_wstr_alloc (const wchar *wstr, u64 wstr_size);
-void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string); 
+void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string, u64 string_capacity); 
 
 wchar *string_to_wstr_alloc (const String *string);
 void string_to_wstr_into (const String *string, wchar *wstr, u64 wstr_size);
@@ -588,11 +588,42 @@ void string_editor_to_upper (StringEditor *editor, u64 start, u64 end);
 
 // -- encoding helpers --------------------------
 
+// UTF-8 masks
+static const u32 UTF8_MASK_1BYTE = 0x7F;     // 0xxxxxxx
+static const u32 UTF8_MASK_2BYTE = 0x7FF;	// 110xxxxx 10xxxxxx
+static const u32 UTF8_MASK_3BYTE = 0xFFFF;   // 1110xxxx 10xxxxxx 10xxxxxx
+static const u32 UTF8_MASK_4BYTE = 0x10FFFF; // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+
+// UTF-8 Prefixes
+static const u32 UTF8_PREFIX_1BYTE = 0x00; // not really used, just cast
+static const u32 UTF8_PREFIX_2BYTE = 0xC0; // 110xxxxx
+static const u32 UTF8_PREFIX_3BYTE = 0xE0; // 1110xxxx
+static const u32 UTF8_PREFIX_4BYTE = 0xF0; // 11110xxx
+static const u32 UTF8_PREFIX_CONT  = 0x80; // 10xxxxxx
+
+// UTF-8 Continuation bit masks
+static const u32 UTF8_MASK_6BIT = 0x3F;
+static const u32 UTF8_MASK_5BIT = 0x1F;
+static const u32 UTF8_MASK_4BIT = 0x0F;
+static const u32 UTF8_MASK_3BIT = 0x07;
+
+// UTF-16 surrogate ranges
+static const u32 UTF16_HIGH_SURROGATE_START = 0xD800;
+static const u32 UTF16_HIGH_SURROGATE_END   = 0xDBFF;
+static const u32 UTF16_LOW_SURROGATE_START  = 0xDC00;
+static const u32 UTF16_LOW_SURROGATE_END    = 0xDFFF;
+
+// UTF-16 surrogate math
+static const u32 UTF16_SURROGATE_OFFSET    = 0x10000;
+static const u32 UTF16_HIGH_SURROGATE_MASK = 0x3FF;
+static const u32 UTF16_LOW_SURROGATE_MASK  = 0x3FF;
+static const u32 UTF16_SURROGATE_SHIFT     = 10;
+
 static u64 utf8_encode_char(u32 codepoint, char *buffer) {
     if (codepoint <= 0x7F) {
-        buffer[0] = (char)codepoint;
+        buffer[0] = (char) codepoint;
         return 1;
-} else if (codepoint <= 0x7FF) {
+	} else if (codepoint <= 0x7FF) {
         buffer[0] = 0xC0 | (codepoint >> 6);
         buffer[1] = 0x80 | (codepoint & 0x3F);
         return 2;
@@ -612,7 +643,7 @@ static u64 utf8_encode_char(u32 codepoint, char *buffer) {
 
 static u64 utf16_encode_char(u32 codepoint, char16 *buffer) {
     if (codepoint <= 0xFFFF) {
-        buffer[0] = (char16)codepoint;
+        buffer[0] = (char16) codepoint;
         return 1;
     } else {
         // encode surrogate pair
@@ -1584,7 +1615,7 @@ u64 string_find_last_char (const String *s, char c) {
 	return STRING_INVALID_INDEX;
 }
 
-u64 string_find_next_substring(const String *s, const String *substr) {
+u64 string_find_next_substring (const String *s, const String *substr) {
     if (substr->length == 0) { return 0; }
     if (s->length < substr->length) { return STRING_INVALID_INDEX; }
 
@@ -1597,7 +1628,7 @@ u64 string_find_next_substring(const String *s, const String *substr) {
     return STRING_INVALID_INDEX;
 }
 
-u64 string_find_last_substring(const String *s, const String *substr) {
+u64 string_find_last_substring (const String *s, const String *substr) {
     if (substr->length == 0) { return s->length; }
     if (s->length < substr->length) { return STRING_INVALID_INDEX; }
  
@@ -1614,14 +1645,14 @@ u64 string_find_last_substring(const String *s, const String *substr) {
 
 // -- cstr ------------------
 
-String string_from_cstr(const char *cstr, u64 cstr_size) {
+String string_from_cstr (const char *cstr, u64 cstr_size) {
     if (!cstr) {
 		return (String) { NULL, 0 };
 	}
     return (String) { (char *) cstr, cstr_size };
 }
 
-String *string_from_cstr_alloc(const char *cstr, u64 cstr_size) {
+String *string_from_cstr_alloc (const char *cstr, u64 cstr_size) {
     if (!cstr) { return NULL; }
 
     String *string = memory_allocate(memory_size_of(String));
@@ -1638,7 +1669,7 @@ String *string_from_cstr_alloc(const char *cstr, u64 cstr_size) {
     return string;
 }
 
-void string_from_cstr_into(const char *cstr, u64 cstr_size, String *string) {
+void string_from_cstr_into (const char *cstr, u64 cstr_size, String *string) {
     if (!cstr || !string || !string->value) { return; }
 
     u64 copy_len = xtd_min(string->length, cstr_size);
@@ -1647,7 +1678,7 @@ void string_from_cstr_into(const char *cstr, u64 cstr_size, String *string) {
 }
 
 
-char *string_to_cstr_alloc(const String *string) {
+char *string_to_cstr_alloc (const String *string) {
     if (!string) { return NULL; }
 
     char *cstr = memory_allocate(string->length + 1);
@@ -1658,7 +1689,7 @@ char *string_to_cstr_alloc(const String *string) {
     return cstr;
 }
 
-void string_to_cstr_into(const String *string, char *cstr, u64 cstr_size) {
+void string_to_cstr_into (const String *string, char *cstr, u64 cstr_size) {
     if (!string || !cstr || cstr_size == 0) { return; }
 
     u64 copy_len = xtd_min(string->length, cstr_size - 1);
@@ -1668,7 +1699,58 @@ void string_to_cstr_into(const String *string, char *cstr, u64 cstr_size) {
 
 // -- wstr ------------------
 
-String string_from_wstr(const wchar *wstr, u64 wstr_size) {
+void fill_utf8_buffer_from_wstr (char *buffer, u64 *buffer_length, const wchar *wstr, u64 wstr_size) {
+	
+	u64 i = 0;
+    WCharIterator it;
+
+    while ((it = wchar_next(wstr, wstr_size, &i)).codepoint != 0) {
+        
+		u32 code_point = it.codepoint;
+
+		if (code_point <= UTF8_MASK_1BYTE) {
+			buffer[(*buffer_length)++] = (char) code_point;
+		} 
+		else if (code_point <= UTF8_MASK_2BYTE) {
+			buffer[(*buffer_length)++] = UTF8_PREFIX_2BYTE | ((code_point >> 6) & UTF8_MASK_5BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
+		} 
+		else if (code_point <= UTF8_MASK_3BYTE) {
+			buffer[(*buffer_length)++] = UTF8_PREFIX_3BYTE | ((code_point >> 12) & UTF8_MASK_4BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 6)  & UTF8_MASK_6BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
+		} 
+		else {
+			buffer[(*buffer_length)++] = UTF8_PREFIX_4BYTE | ((code_point >> 18) & UTF8_MASK_3BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 12) & UTF8_MASK_6BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 6)  & UTF8_MASK_6BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
+		}
+    }
+}
+
+void fill_wchar_buffer_from_string (wchar *buffer, u64 *buffer_length, const String *string) {
+    u64 i = 0;
+    UTF8Iterator it; 
+    while ((it = utf8_next(string, &i)).codepoint != 0) {
+        u32 code_point = it.codepoint;
+
+        #ifdef _WIN32 // 16-bit wchar
+            // UTF-16 surrogate pair handling
+            if (code_point > 0xFFFF) {
+                code_point -= UTF16_SURROGATE_OFFSET;
+                buffer[(*buffer_length)++] = UTF16_HIGH_SURROGATE_START | ((code_point >> UTF16_SURROGATE_SHIFT) & UTF16_HIGH_SURROGATE_MASK);
+                buffer[(*buffer_length)++] = UTF16_LOW_SURROGATE_START | (code_point & UTF16_LOW_SURROGATE_MASK);
+            } else {
+                buffer[(*buffer_length)++] = (wchar) code_point;
+            }
+        #else // 32-bit wchar
+            buffer[(*buffer_length)++] = (wchar) code_point; 
+        #endif
+    }
+}
+
+String string_from_wstr (const wchar *wstr, u64 wstr_size) {
     if (!wstr) {
 		return (String) { NULL, 0 };
 	}
@@ -1679,34 +1761,14 @@ String string_from_wstr(const wchar *wstr, u64 wstr_size) {
     if (!buffer) {
 		return (String) { NULL, 0 };
 	}
+	u64 buffer_length = 0;
+  
+	fill_utf8_buffer_from_wstr(buffer, &buffer_length, wstr, wstr_size); 
 
-    u64 out_len = 0;
-    u64 i = 0;
-    WCharIterator it;
-    while ((it = wchar_next(wstr, wstr_size, &i)).codepoint != 0) {
-        u32 cp = it.codepoint;
-
-        if (cp <= 0x7F) {
-            buffer[out_len++] = (char)cp;
-        } else if (cp <= 0x7FF) {
-            buffer[out_len++] = 0xC0 | ((cp >> 6) & 0x1F);
-            buffer[out_len++] = 0x80 | (cp & 0x3F);
-        } else if (cp <= 0xFFFF) {
-            buffer[out_len++] = 0xE0 | ((cp >> 12) & 0x0F);
-            buffer[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
-            buffer[out_len++] = 0x80 | (cp & 0x3F);
-        } else {
-            buffer[out_len++] = 0xF0 | ((cp >> 18) & 0x07);
-            buffer[out_len++] = 0x80 | ((cp >> 12) & 0x3F);
-            buffer[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
-            buffer[out_len++] = 0x80 | (cp & 0x3F);
-        }
-    }
-
-    return (String) { buffer, out_len };
+    return (String) { buffer, buffer_length };
 }
 
-String *string_from_wstr_alloc(const wchar *wstr, u64 wstr_size) {
+String *string_from_wstr_alloc (const wchar *wstr, u64 wstr_size) {
     if (!wstr) { return NULL; }
 
     // Allocate the String struct itself
@@ -1720,108 +1782,55 @@ String *string_from_wstr_alloc(const wchar *wstr, u64 wstr_size) {
         free(s);
         return NULL;
     }
-
-    u64 out_len = 0;
-    u64 i = 0;
-    WCharIterator it;
-    while ((it = wchar_next(wstr, wstr_size, &i)).codepoint != 0) {
-        u32 cp = it.codepoint;
-
-        if (cp <= 0x7F) {
-            buffer[out_len++] = (char)cp;
-        } else if (cp <= 0x7FF) {
-            buffer[out_len++] = 0xC0 | ((cp >> 6) & 0x1F);
-            buffer[out_len++] = 0x80 | (cp & 0x3F);
-        } else if (cp <= 0xFFFF) {
-            buffer[out_len++] = 0xE0 | ((cp >> 12) & 0x0F);
-            buffer[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
-            buffer[out_len++] = 0x80 | (cp & 0x3F);
-        } else {
-            buffer[out_len++] = 0xF0 | ((cp >> 18) & 0x07);
-            buffer[out_len++] = 0x80 | ((cp >> 12) & 0x3F);
-            buffer[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
-            buffer[out_len++] = 0x80 | (cp & 0x3F);
-        }
-    }
+	u64 buffer_length = 0;
+	
+	fill_utf8_buffer_from_wstr(buffer, &buffer_length, wstr, wstr_size); 
 
 	s->value = buffer;
-    s->length = out_len;
+    s->length = buffer_length;
     return s;
 }
 
-void string_from_wstr_into(const wchar *wstr, u64 wstr_size, String *string) {
-    if (!string || !string->value || string->length == 0) return;
+void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string, u64 string_capacity) {
+    if (!string || !string->value || string_capacity == 0) return;
     if (!wstr) {
         string->length = 0;
         return;
     }
 
-    u64 copy_len = (wstr_size < string->length) ? wstr_size : string->length;
-
-    for (u64 i = 0; i < copy_len; ++i) {
-        string->value[i] = (char) wstr[i];  // or handle UTF-8 encoding if needed
+	// Worst-case buffer size: 4 bytes per wchar
+    u64 max_bytes = wstr_size * 4;
+    char *buffer = (char *) memory_allocate(max_bytes);
+    if (!buffer) {
+        return;
     }
+	u64 buffer_length = 0;
+	
+	fill_utf8_buffer_from_wstr(buffer, &buffer_length, wstr, wstr_size); 
 
-    string->length = copy_len;  // update to actual number copied
+    u64 copy_length = xtd_min(buffer_length, string_capacity);
+	memory_copy(string->value, buffer, copy_length);
+    string->length = copy_length; 
 }
 
-wchar *string_to_wstr_alloc(const String *string) {
+wchar *string_to_wstr_alloc (const String *string) {
     if (!string || !string->value || string->length == 0) { return NULL; }
 
     // Worst case: 1 wchar per codepoint (or surrogate pair handled on Windows)
     u64 max_wchars = string->length;
     wchar *buffer = (wchar *) memory_allocate(max_wchars * memory_size_of(wchar));
     if (!buffer) { return NULL; }
-
-    u64 i = 0;
-    u64 out_index = 0;
-    UTF8Iterator it;
-    while ((it = utf8_next(string, &i)).codepoint != 0) {
-        u32 cp = it.codepoint;
-
-#ifdef _WIN32
-        // UTF-16 surrogate pair handling
-        if (cp > 0xFFFF) {
-            cp -= 0x10000;
-            buffer[out_index++] = 0xD800 | ((cp >> 10) & 0x3FF); // high surrogate
-            buffer[out_index++] = 0xDC00 | (cp & 0x3FF);         // low surrogate
-        } else {
-            buffer[out_index++] = (wchar)cp;
-        }
-#else
-        buffer[out_index++] = (wchar)cp; // Linux/macOS wchar_t is 32-bit
-#endif
-    }
+	u64 buffer_length = 0;
+    
+	fill_wchar_buffer_from_string(buffer, &buffer_length, string);	
 
     return buffer;
 }
 
-void string_to_wstr_into(const String *string, wchar *wstr, u64 wstr_size) {
+void string_to_wstr_into (const String *string, wchar *wstr, u64 wstr_size) {
     if (!string || !string->value || !wstr || wstr_size == 0) { return; }
-
-    u64 i = 0;
-    u64 out_index = 0;
-    UTF8Iterator it;
-
-    while ((it = utf8_next(string, &i)).codepoint != 0) {
-        if (out_index >= wstr_size) break; // prevent buffer overflow
-
-        u32 cp = it.codepoint;
-
-#ifdef _WIN32
-        // UTF-16 surrogate pair handling
-        if (cp > 0xFFFF) {
-            if (out_index + 1 >= wstr_size) break; // not enough space for surrogate pair
-            cp -= 0x10000;
-            wstr[out_index++] = 0xD800 | ((cp >> 10) & 0x3FF); // high surrogate
-            wstr[out_index++] = 0xDC00 | (cp & 0x3FF);         // low surrogate
-        } else {
-            wstr[out_index++] = (wchar)cp;
-        }
-#else
-        wstr[out_index++] = (wchar)cp; // Linux/macOS wchar_t is 32-bit
-#endif
-    }
+	u64 buffer_length = 0;
+	fill_wchar_buffer_from_string(wstr, &buffer_length, string);
 }
 
 // -- utf16 -----------------
@@ -1863,7 +1872,7 @@ String string_from_utf16 (const char16 *c16str, u64 c16str_size) {
     return s;
 }
 
-String *string_from_utf16_alloc(const char16 *c16str, u64 c16str_size) {
+String *string_from_utf16_alloc (const char16 *c16str, u64 c16str_size) {
     if (!c16str) { return NULL; }
 
     String *s = malloc(sizeof(String));
@@ -1909,7 +1918,7 @@ String *string_from_utf16_alloc(const char16 *c16str, u64 c16str_size) {
     return s;
 }
 
-void string_from_utf16_into(const char16 *c16str, u64 c16str_size, String *string) {
+void string_from_utf16_into (const char16 *c16str, u64 c16str_size, String *string) {
     if (!string) { return; }
 
     // Free existing buffer if present
@@ -1958,7 +1967,7 @@ void string_from_utf16_into(const char16 *c16str, u64 c16str_size, String *strin
     string->length = pos;
 }
 
-char16 *string_to_utf16_alloc(const String *string) {
+char16 *string_to_utf16_alloc (const String *string) {
     if (!string || string->length == 0) return NULL;
 
     // Allocate enough space for all codepoints (each may take 2 UTF-16 units)
@@ -1983,7 +1992,7 @@ char16 *string_to_utf16_alloc(const String *string) {
     return buffer;
 }
 
-void string_to_utf16_into(const String *string, char16 *c16str, u64 c16str_size) {
+void string_to_utf16_into (const String *string, char16 *c16str, u64 c16str_size) {
     if (!string || !c16str || c16str_size == 0) return;
 
     u64 out_pos = 0;
@@ -2005,7 +2014,7 @@ void string_to_utf16_into(const String *string, char16 *c16str, u64 c16str_size)
 
 // -- utf32 -----------------
 
-String string_from_utf32(const char32 *c32str, u64 c32str_length) {
+String string_from_utf32 (const char32 *c32str, u64 c32str_length) {
     String s = {0};
     if (!c32str || c32str_length == 0) return s;
 
@@ -2029,7 +2038,7 @@ String string_from_utf32(const char32 *c32str, u64 c32str_length) {
     return s;
 }
 
-String *string_from_utf32_alloc(const char32 *c32str, u64 c32str_length) {
+String *string_from_utf32_alloc (const char32 *c32str, u64 c32str_length) {
     if (!c32str) return NULL;
 
     String *s = malloc(sizeof(String));
@@ -2061,7 +2070,7 @@ String *string_from_utf32_alloc(const char32 *c32str, u64 c32str_length) {
     return s;
 }
 
-void string_from_utf32_into(const char32 *c32str, u64 c32str_length, String *string) {
+void string_from_utf32_into (const char32 *c32str, u64 c32str_length, String *string) {
     if (!string) return;
 
     // free existing buffer
@@ -2089,7 +2098,7 @@ void string_from_utf32_into(const char32 *c32str, u64 c32str_length, String *str
     string->length = pos;
 }
 
-char32 *string_to_utf32_alloc(const String *string) {
+char32 *string_to_utf32_alloc (const String *string) {
     if (!string || string->length == 0) return NULL;
 
     char32 *buffer = malloc(string->length * sizeof(char32)); // worst-case: 1 UTF-32 per UTF-8 byte
@@ -2106,7 +2115,7 @@ char32 *string_to_utf32_alloc(const String *string) {
     return buffer;
 }
 
-void string_to_utf32_into(const String *string, char32 *c32str, u64 c32str_size) {
+void string_to_utf32_into (const String *string, char32 *c32str, u64 c32str_size) {
     if (!string || !c32str || c32str_size == 0) return;
 
     u64 out_pos = 0;
