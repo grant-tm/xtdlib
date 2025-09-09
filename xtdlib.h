@@ -485,13 +485,114 @@ String string_from_format (const char* fmt, ...);
 String *string_from_format_alloc (const char *fmt, ...);
 void string_from_format_into (String *string, const char *fmt, ...);
 
+// -- STRING EDITOR TYPE ------------------------------------------------------
+
+typedef enum SE_AllocationFlags {
+    // allocation mode: use 1st bit (mask = 0b01)
+    SE_ALLOC_MASK = 0x01, 
+    SE_ALLOC_NONE = 0x00,
+    SE_ALLOC_AUTO = 0x01,
+	// policy mode: use 2nd bit (mask = 0b10)
+    SE_POLICY_MASK     = 0x02, 
+    SE_POLICY_DEFAULT  = 0x00,
+    SE_POLICY_OVERRIDE = 0x02,
+} SE_AllocationFlags;
+
+typedef enum SE_SearchFlags {
+	// iteration direction: use 1st bit (mask = 0b01)
+	SE_ITER_MASK     = 0x01, 
+	SE_ITER_FORWARD  = 0x00,
+	SE_ITER_BACKWARD = 0x01,
+	// case sensitivity: use the next bit (mask = 0b10)
+	SE_CASE_MASK        = 0x02,
+	SE_CASE_SENSITIVE   = 0x00,
+	SE_CASE_INSENSITIVE = 0x02, 
+} SE_SearchFlags; 
+
+typedef enum { 
+	SE_ERROR, 
+	SE_SUCCESS, 
+	SE_NO_SPACE,
+	SE_TRUNCATED,
+} SE_Result;
+
+typedef struct StringEditor {
+	char *buffer;
+	u64 length;
+	u64 capacity;
+	SE_AllocationFlags default_policy;
+} StringEditor;
+
+typedef struct SE_Cursor {
+	u64 index;
+	char *addr;
+	bool valid;
+} SE_Cursor;
+
+#define SE_INVALID_INDEX ((u64) -1)
+
+// -- memory management -----
+void string_editor_init (StringEditor *editor, u64 initial_capacity);
+void string_editor_free (StringEditor *editor);
+u64 string_editor_reserve (StringEditor *editor, u64 new_capacity);
+void string_editor_clear (StringEditor *editor);
+u64 string_editor_shrink (StringEditor *editor);
+
+// -- slice / copy ----------
+StringEditor *string_editor_copy (const StringEditor *editor);
+StringEditor string_editor_slice (const StringEditor *editor, u64 start, u64 end);
+StringEditor *string_editor_copy_slice (const StringEditor *editor, u64 start, u64 end);
+SE_Result string_editor_copy_slice_into (const StringEditor *editor_to_copy, u64 start, u64 end, StringEditor *editor_to_fill);
+
+// -- find ------------------
+//void string_editor_find_next_char (StringEditor *editor, SE_Cursor *cursor, const char c, SE_SearchFlags search_flags);
+//void string_editor_find_next_substring (StringEditor *editor, SE_Cursor *cursor, const String *substring, SE_SearchFlags search_flags);
+
+// -- edit ------------------
+inline u64 string_editor_insert_capacity_needed (StringEditor *editor, u64 index, const String *string);
+SE_Result string_editor_insert  (StringEditor *editor, u64 index, const String *string, SE_AllocationFlags alloc_flags);
+
+u64 string_editor_insert_at_cursor_capacity_needed (StringEditor *editor, SE_Cursor *cursor, const String *string);
+SE_Result string_editor_insert_at_cursor (StringEditor *editor, SE_Cursor *cursor, const String *string);
+
+u64 string_editor_replace_capacity_needed (StringEditor *editor, u64 index, const String *string);
+SE_Result string_editor_replace (StringEditor *editor, u64 index, const String *string, SE_AllocationFlags alloc_flags);
+
+u64 string_editor_replace_at_cursor_capacity_needed (StringEditor *editor, SE_Cursor *cursor, const String *string);
+SE_Result string_editor_replace_at_cursor (StringEditor *editor, SE_Cursor *cursor, const String *string, SE_AllocationFlags alloc_flags);
+
+// -- replace ---------------
+u64 string_editor_replace_next_char_capacity_needed (StringEditor *editor, const char c, const String *replacement, SE_SearchFlags search_flags);
+SE_Result string_editor_replace_next_char (StringEditor *editor, const char c, const String *replacement, SE_SearchFlags search_flags);
+
+u64 string_editor_replace_all_char_capacity_needed (StringEditor *editor, const char c, const String *replacement);
+SE_Result string_editor_replace_all_char (StringEditor *editor, const char c, const String *replacement, SE_AllocationFlags alloc_flags);
+
+u64 string_editor_replace_next_substring_capacity_needed (StringEditor *editor, const String *search, const String *replacement, SE_SearchFlags search_flags);
+SE_Result string_editor_replace_next_substring (StringEditor *editor, const String *search, const String *replacement, SE_SearchFlags search_flags);
+
+u64 string_editor_replace_all_substring_capacity_needed (StringEditor *editor, const String *search, const String *replacement);
+SE_Result string_editor_replace_all_substring (StringEditor *editor, const String *search, const String *replacement, SE_AllocationFlags alloc_flags);
+
+// -- trim ------------------
+SE_Result string_editor_collapse_repeat_char (StringEditor *editor, char c);
+SE_Result string_editor_collapse_repeat_substring (StringEditor *editor, const String *string);
+
+SE_Result string_editor_trim_start (StringEditor *editor, const String *chars_to_trim);
+SE_Result string_editor_trim_end   (StringEditor *editor, const String *chars_to_trim);
+SE_Result string_editor_trim (StringEditor *editor, const String *chars_to_trim);
+
+// -- upper / lower ---------
+void string_editor_to_lower (StringEditor *editor, u64 start, u64 end);
+void string_editor_to_upper (StringEditor *editor, u64 start, u64 end);
+
 // -- encoding helpers --------------------------
 
 static u64 utf8_encode_char(u32 codepoint, char *buffer) {
     if (codepoint <= 0x7F) {
         buffer[0] = (char)codepoint;
         return 1;
-    } else if (codepoint <= 0x7FF) {
+} else if (codepoint <= 0x7FF) {
         buffer[0] = 0xC0 | (codepoint >> 6);
         buffer[1] = 0x80 | (codepoint & 0x3F);
         return 2;
@@ -521,6 +622,8 @@ static u64 utf16_encode_char(u32 codepoint, char16 *buffer) {
         return 2;
     }
 }
+
+// -- UTF8 Iterator Type ------------------------------------------------------
 
 typedef struct {
     u32 codepoint;   // Unicode scalar value
@@ -640,6 +743,8 @@ static inline UTF8Iterator utf8_prev(const String *s, u64 *i) {
     *i = pos;
     return it;
 }
+
+// -- WChar Iterator ----------------------------------------------------------
 
 typedef struct {
     u32 codepoint;
@@ -1507,7 +1612,7 @@ u64 string_find_last_substring(const String *s, const String *substr) {
 
 // -- conversion --------------------------------------------------------------
 
-// -- cstr --------------------------------------
+// -- cstr ------------------
 
 String string_from_cstr(const char *cstr, u64 cstr_size) {
     if (!cstr) {
@@ -1561,7 +1666,7 @@ void string_to_cstr_into(const String *string, char *cstr, u64 cstr_size) {
     cstr[copy_len] = '\0';
 }
 
-// -- wstr --------------------------------------
+// -- wstr ------------------
 
 String string_from_wstr(const wchar *wstr, u64 wstr_size) {
     if (!wstr) {
@@ -2013,11 +2118,304 @@ void string_to_utf32_into(const String *string, char32 *c32str, u64 c32str_size)
     }
 }
 
-// -- format ------------------------------------
+// -- String Builder ----------------------------------------------------------
 
-String string_from_format (const char* fmt, ...);
-String *string_from_format_alloc (const char *fmt, ...);
-void string_from_format_into (String *string, const char *fmt, ...);
+// -- memory management ---------------
+
+void string_editor_init (StringEditor *editor, u64 initial_capacity) {
+	if (!editor) { return; }
+
+	if (initial_capacity == 0) {
+		editor->buffer = NULL;
+	} else {
+		editor->buffer = memory_allocate(initial_capacity);
+	}
+	
+	editor->length = 0;
+	editor->capacity = initial_capacity;
+	editor->default_policy = SE_ALLOC_AUTO;
+}
+
+void string_editor_free (StringEditor *editor) {
+	if (!editor) { return; }
+
+	if (editor->buffer) {
+		memory_free(editor->buffer);
+		editor->buffer = NULL;
+	}
+}
+
+u64 string_editor_reserve (StringEditor *editor, u64 new_capacity) {
+	if (!editor) { return 0; }
+
+	if (editor->capacity < new_capacity) {
+		char *new_buffer = memory_reallocate(editor->buffer, new_capacity);
+		if (!new_buffer) {
+			return editor->capacity;
+		}
+		editor->buffer = new_buffer;
+		editor->capacity = new_capacity;
+	}
+
+	return editor->capacity;
+}
+
+void string_editor_clear (StringEditor *editor) {
+	if (!editor) { return; }
+	editor->length = 0;
+}
+
+u64 string_editor_shrink (StringEditor *editor) {
+	if (!editor || !editor->buffer) { return 0; }
+
+	if (editor->length == 0 || editor->capacity == 0) {
+		memory_free(editor->buffer);
+		editor->buffer = NULL;
+		editor->length = 0;
+		editor->capacity = 0;
+	} 
+	else if (editor->capacity > editor->length) {
+		u64 new_capacity = editor->length;
+		
+		char *new_buffer = memory_reallocate(editor->buffer, new_capacity);
+		if (!new_buffer) {
+			return editor->capacity;
+		}
+		editor->buffer = new_buffer;
+		editor->capacity = new_capacity;
+	}
+
+	return editor->capacity;
+}
+
+// -- slice / copy --------------------
+
+StringEditor *string_editor_copy (const StringEditor *editor) {
+	if (!editor) { return NULL; }
+
+	StringEditor *new_editor = memory_allocate(memory_size_of(StringEditor));
+	if (!new_editor) { return NULL; }
+
+	if (editor->length == 0) {
+		new_editor->buffer = NULL;
+		new_editor->length = 0;
+		new_editor->capacity = 0;
+	}
+	else {
+		new_editor->buffer = memory_allocate(editor->length);	
+		if (!new_editor->buffer) {
+			memory_free(new_editor);
+			return NULL;
+		}
+		memory_copy(new_editor->buffer, editor->buffer, editor->length); 
+		new_editor->length = editor->length;
+		new_editor->capacity = editor->length;
+	}
+	
+	new_editor->default_policy = SE_ALLOC_AUTO;
+	return new_editor;
+}
+
+StringEditor string_editor_slice (const StringEditor *editor, u64 start, u64 end) {
+	end = xtd_min(end, editor->length);
+	start = xtd_min(start, end);
+
+	char *slice_buffer = editor->buffer + start;
+	u64 slice_length = end - start;
+
+	return (StringEditor) { slice_buffer, slice_length, slice_length, SE_ALLOC_NONE };
+}
+
+StringEditor *string_editor_copy_slice (const StringEditor *editor, u64 start, u64 end) {
+	StringEditor slice = string_editor_slice(editor, start, end);
+	StringEditor *slice_copy = string_editor_copy(&slice);
+	return slice_copy;
+}
+
+SE_Result string_editor_copy_slice_into (const StringEditor *editor_to_copy, u64 start, u64 end, StringEditor *editor_to_fill) {
+	if (!editor_to_copy || !editor_to_fill) { return SE_ERROR; }
+	if (!editor_to_copy->buffer || !editor_to_fill->buffer) { return SE_ERROR; }
+
+	StringEditor slice = string_editor_slice(editor_to_copy, start, end);
+	u64 copy_length = xtd_min(slice.length, editor_to_fill->capacity);
+	memory_copy(editor_to_fill->buffer, slice.buffer, copy_length);
+	editor_to_fill->length = copy_length;
+
+	return (copy_length == slice.length) ? SE_SUCCESS : SE_TRUNCATED;
+}
+
+// -- find ------------------
+
+u64 string_editor_find_next_char (StringEditor *editor, const char c, SE_SearchFlags search_flags) {
+	if (!editor || !editor->buffer) {
+		return SE_INVALID_INDEX;
+	}
+
+	if (flag_is_set(search_flags, SE_CASE_INSENSITIVE)) {
+		// todo 
+		// to_lower c
+		// copy editor and to_lower
+	}
+	
+	if (flag_is_set(search_flags, SE_ITER_FORWARD)) {
+		for (u64 index = 0; index < editor->length; ++index) { 
+			if (editor->buffer[index] == c) { 
+				return index; 
+			}
+		}
+	}
+	else if (flag_is_set(search_flags, SE_ITER_BACKWARD)) {
+		for (u64 index = editor->length; index != SE_INVALID_INDEX; --index) {
+			if (editor->buffer[index] == c) {
+				return index;
+			}
+		}
+	}
+
+	return SE_INVALID_INDEX;
+}
+
+u64 string_editor_find_next_substring (StringEditor *editor, const String *substring, SE_SearchFlags search_flags) {
+	if (!editor || !editor->buffer) {
+		return SE_INVALID_INDEX;
+	}
+
+	if (flag_is_set(search_flags, SE_CASE_INSENSITIVE)) {
+		// todo
+		// copy substring and to_lower
+		// copy editor and to_lower
+	}
+
+	if (flag_is_set(search_flags, SE_ITER_FORWARD)) {
+		for (u64 index = 0; index < (editor->length - substring->length); ++index) {
+			if (memory_compare(editor->buffer + index, substring->value, substring->length) == 0) {
+				return index;
+			}
+		}
+	}
+	else if (flag_is_set(search_flags, SE_ITER_BACKWARD)) {
+		
+		for (u64 index = editor->length - substring->length; index != SE_INVALID_INDEX; --index) {
+			if (memory_compare(editor->buffer - index, substring->value, substring->length) == 0) {
+				return index;
+			}
+		}
+	}
+
+	return SE_INVALID_INDEX;
+}
+
+// -- edit ------------------
+
+inline u64 string_editor_insert_capacity_needed (StringEditor *editor, u64 index, const String *string) {
+	if (!editor) { return 0; }
+	if (!string) { return editor->length; }
+
+	if (index > editor->length) { return index + string->length; }
+
+	return editor->length + string->length;
+}
+
+SE_Result string_editor_insert  (StringEditor *editor, u64 index, const String *string, SE_AllocationFlags alloc_flags) {
+	if (!editor) { return SE_ERROR; }
+	if (!string || !string->value) { return SE_ERROR; }
+	
+	if (flag_is_set(alloc_flags, SE_ALLOC_NONE) && editor->capacity <= index) {
+		return SE_NO_SPACE;
+	}
+	
+	if (flag_is_set(alloc_flags, SE_ALLOC_AUTO)) {
+		u64 capacity_needed = string_editor_insert_capacity_needed(editor, index, string);			
+		u64 new_capacity = string_editor_reserve(editor, capacity_needed);
+		if (new_capacity < capacity_needed) {
+			return SE_ERROR;
+		}
+	}	
+
+	u64 max_copy_length = editor->capacity - index;
+	u64 copy_length = xtd_min(string->length, max_copy_length);
+	if (index > editor->length) {
+		memory_zero(editor->buffer + editor->length, index - editor->length);
+	}
+	if (index < editor->length) {
+		memory_shift_right(editor->buffer + index, editor->length - index, copy_length);
+	}
+	memory_copy(editor->buffer + index, string->value, copy_length);
+	editor->length = (index > editor->length) ? index + copy_length : editor->length + copy_length;
+
+	return (copy_length < string->length) ? SE_TRUNCATED : SE_SUCCESS;
+}
+
+inline u64 string_editor_replace_capacity_needed (StringEditor *editor, u64 index, const String *string) {
+	if (!editor) { return 0; }
+	if (!string) { return editor->length; }
+
+	if (index > editor->length) { return index + string->length; }
+
+	return editor->length + string->length;
+}
+
+SE_Result string_editor_replace (StringEditor *editor, u64 index, const String *string, SE_AllocationFlags alloc_flags) {
+	if (!editor) { return SE_ERROR; }
+	if (!string || !string->value) { return SE_ERROR; }
+
+	if (flag_is_set(alloc_flags, SE_ALLOC_NONE) && editor->capacity <= index) {
+		return SE_NO_SPACE;
+	}
+	
+	if (flag_is_set(alloc_flags, SE_ALLOC_AUTO)) {
+		u64 capacity_needed = string_editor_replace_capacity_needed(editor, index, string);			
+		u64 new_capacity = string_editor_reserve(editor, capacity_needed);
+		if (new_capacity < capacity_needed) {
+			return SE_ERROR;
+		}
+	}	
+
+	u64 max_copy_length = editor->capacity - index;
+	u64 copy_length = xtd_min(string->length, max_copy_length);
+	memory_copy(editor->buffer + index, string->value, copy_length);
+	editor->length = (index > editor->length) ? index + copy_length : editor->length + copy_length;
+
+	return (copy_length < string->length) ? SE_TRUNCATED : SE_SUCCESS;
+}
+
+// -- replace ---------------
+/*
+u64 string_editor_replace_next_char_capacity_needed (StringEditor *editor, const char c, const String *replacement, SE_SearchFlags search_flags);
+SE_Result string_editor_replace_next_char (StringEditor *editor, const char c, const String *replacement, SE_SearchFlags search_flags);
+
+u64 string_editor_replace_all_char_capacity_needed (StringEditor *editor, const char c, const String *replacement);
+SE_Result string_editor_replace_all_char (StringEditor *editor, const char c, const String *replacement, SE_AllocationFlags alloc_flags);
+
+u64 string_editor_replace_next_substring_capacity_needed (StringEditor *editor, const String *search, const String *replacement, SE_SearchFlags search_flags);
+SE_Result string_editor_replace_next_substring (StringEditor *editor, const String *search, const String *replacement, SE_SearchFlags search_flags);
+
+u64 string_editor_replace_all_substring_capacity_needed (StringEditor *editor, const String *search, const String *replacement);
+SE_Result string_editor_replace_all_substring (StringEditor *editor, const String *search, const String *replacement, SE_AllocationFlags alloc_flags);
+
+// -- trim ------------------
+SE_Result string_editor_collapse_repeat_char (StringEditor *editor, char c);
+SE_Result string_editor_collapse_repeat_substring (StringEditor *editor, const String *string);
+
+SE_Result string_editor_trim_start (StringEditor *editor, const String *chars_to_trim);
+SE_Result string_editor_trim_end   (StringEditor *editor, const String *chars_to_trim);
+SE_Result string_editor_trim (StringEditor *editor, const String *chars_to_trim);
+
+// -- upper / lower ---------
+*/
+void string_editor_to_lower (StringEditor *editor, u64 start, u64 end) {
+	xtd_ignore_unused(editor);
+	xtd_ignore_unused(start);
+	xtd_ignore_unused(end);
+	return;	
+}
+
+void string_editor_to_upper (StringEditor *editor, u64 start, u64 end) {
+	xtd_ignore_unused(editor);
+	xtd_ignore_unused(start);
+	xtd_ignore_unused(end);
+	return;
+}
 
 //=============================================================================
 // MULTITHREADING IMPLEMENTATION
