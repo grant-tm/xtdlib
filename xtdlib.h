@@ -193,8 +193,9 @@ static inline void *memory_commit_reserved (void *addr, u64 size) {
     #endif
 }
 
-#define memory_allocate(size) malloc(size);
-#define memory_free(ptr) free(ptr);
+#define memory_allocate(size) malloc(size)
+#define memory_reallocate(ptr, size) realloc((ptr), (size))
+#define memory_free(ptr) free(ptr)
 
 static inline void memory_release (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
@@ -205,7 +206,11 @@ static inline void memory_release (void *addr, u64 size) {
     #endif
 }
 
-#define memory_set(addr, value, size) memset((addr), (value), (size));
+#define memory_set(addr, value, size) memset((addr), (value), (size))
+
+#define memory_move(dest, src, size) memmove((dest), (src), (size))
+#define memory_shift_right(addr, size, steps) memmove((uint8_t *)(addr) + (steps), (addr), (size))
+#define memory_shift_left(addr, size, steps)  memmove((uint8_t *)(addr) - (steps), (addr), (size))
 
 static inline void memory_zero (void *addr, u64 size) {
     #if defined(_WIN32) || defined(_WIN64)
@@ -836,12 +841,12 @@ typedef union Vec3(f64) Vec3f64;
 #define BBit(x) ((u64)1 << (x))
 #define HasBit(n, pos) ((n) & (1 << (pos)))
 
-#define FlagSet(n, f) ((n) |= (f))
-#define FlagClear(n, f) ((n &= ~(f)))
-#define FlagToggle(n, f) ((n) ^= (f))
-#define FlagExists(n, f) (((n) & (f)) == (f))
-#define FlagEquals(n, f) ((n) == (f))
-#define FlagIntersects(n, f) (((n) & (f)) > 0)
+#define flag_set(n, f) ((n) |= (f))
+#define flag_clear(n, f) ((n &= ~(f)))
+#define flag_toggle(n, f) ((n) ^= (f))
+#define flag_is_set(n, f) (((n) & (f)) == (f))
+#define flag_equals(n, f) ((n) == (f))
+#define flag_intersects(n, f) (((n) & (f)) > 0)
 
 //=============================================================================
 // MULTITHREADING DECLARATIONS
@@ -1431,7 +1436,7 @@ String *string_copy (const String *s) {
 	copied_string->value = memory_allocate(memory_size_of(copied_string->length));	
     if (!copied_string->value) return NULL;
 
-	memory_copy(copied_string->value, s->value, s->length);
+	memory_copy((void *) copied_string->value, s->value, s->length);
 	
 	return copied_string;
 }
@@ -1440,7 +1445,7 @@ String *string_copy_into (const String *string_to_copy, String *string_to_fill) 
 	if (!string_to_copy || !string_to_copy->value) { return string_to_fill; }
 
 	const u64 copy_length = xtd_min(string_to_copy->length, string_to_fill->length);
-	memory_copy(string_to_fill->value, string_to_copy->value, copy_length);
+	memory_copy((void *) string_to_fill->value, string_to_copy->value, copy_length);
 	
 	string_to_fill->length = copy_length;
 	
@@ -1528,7 +1533,7 @@ String *string_from_cstr_alloc(const char *cstr, u64 cstr_size) {
         return NULL;
     }
 
-    memory_copy(string->value, (void *) cstr, cstr_size);
+    memory_copy((void *) string->value, cstr, cstr_size);
     string->length = cstr_size;
     return string;
 }
@@ -1537,7 +1542,7 @@ void string_from_cstr_into(const char *cstr, u64 cstr_size, String *string) {
     if (!cstr || !string || !string->value) { return; }
 
     u64 copy_len = xtd_min(string->length, cstr_size);
-    memory_copy(string->value, (void *) cstr, copy_len);
+    memory_copy((void *) string->value, cstr, copy_len);
     string->length = copy_len;
 }
 
@@ -1610,8 +1615,8 @@ String *string_from_wstr_alloc(const wchar *wstr, u64 wstr_size) {
 
     // Worst-case buffer size: 4 bytes per wchar
     u64 max_bytes = wstr_size * 4;
-    s->value = (char *) memory_allocate(max_bytes);
-    if (!s->value) {
+    char *buffer = (char *) memory_allocate(max_bytes);
+    if (!buffer) {
         free(s);
         return NULL;
     }
@@ -1623,22 +1628,23 @@ String *string_from_wstr_alloc(const wchar *wstr, u64 wstr_size) {
         u32 cp = it.codepoint;
 
         if (cp <= 0x7F) {
-            s->value[out_len++] = (char)cp;
+            buffer[out_len++] = (char)cp;
         } else if (cp <= 0x7FF) {
-            s->value[out_len++] = 0xC0 | ((cp >> 6) & 0x1F);
-            s->value[out_len++] = 0x80 | (cp & 0x3F);
+            buffer[out_len++] = 0xC0 | ((cp >> 6) & 0x1F);
+            buffer[out_len++] = 0x80 | (cp & 0x3F);
         } else if (cp <= 0xFFFF) {
-            s->value[out_len++] = 0xE0 | ((cp >> 12) & 0x0F);
-            s->value[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
-            s->value[out_len++] = 0x80 | (cp & 0x3F);
+            buffer[out_len++] = 0xE0 | ((cp >> 12) & 0x0F);
+            buffer[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
+            buffer[out_len++] = 0x80 | (cp & 0x3F);
         } else {
-            s->value[out_len++] = 0xF0 | ((cp >> 18) & 0x07);
-            s->value[out_len++] = 0x80 | ((cp >> 12) & 0x3F);
-            s->value[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
-            s->value[out_len++] = 0x80 | (cp & 0x3F);
+            buffer[out_len++] = 0xF0 | ((cp >> 18) & 0x07);
+            buffer[out_len++] = 0x80 | ((cp >> 12) & 0x3F);
+            buffer[out_len++] = 0x80 | ((cp >> 6) & 0x3F);
+            buffer[out_len++] = 0x80 | (cp & 0x3F);
         }
     }
 
+	s->value = buffer;
     s->length = out_len;
     return s;
 }
@@ -1653,7 +1659,7 @@ void string_from_wstr_into(const wchar *wstr, u64 wstr_size, String *string) {
     u64 copy_len = (wstr_size < string->length) ? wstr_size : string->length;
 
     for (u64 i = 0; i < copy_len; ++i) {
-        string->value[i] = (char)wstr[i];  // or handle UTF-8 encoding if needed
+        string->value[i] = (char) wstr[i];  // or handle UTF-8 encoding if needed
     }
 
     string->length = copy_len;  // update to actual number copied
@@ -1718,7 +1724,7 @@ void string_to_wstr_into(const String *string, wchar *wstr, u64 wstr_size) {
     }
 }
 
-// -- utf16 -------------------------------------
+// -- utf16 -----------------
 
 String string_from_utf16 (const char16 *c16str, u64 c16str_size) {
     String s = {0};
@@ -1897,9 +1903,8 @@ void string_to_utf16_into(const String *string, char16 *c16str, u64 c16str_size)
     }
 }
 
-// -- utf32 -------------------------------------
+// -- utf32 -----------------
 
-// Convert UTF-32 array to String (UTF-8)
 String string_from_utf32(const char32 *c32str, u64 c32str_length) {
     String s = {0};
     if (!c32str || c32str_length == 0) return s;
@@ -1924,7 +1929,6 @@ String string_from_utf32(const char32 *c32str, u64 c32str_length) {
     return s;
 }
 
-// Allocate and convert UTF-32 array to String
 String *string_from_utf32_alloc(const char32 *c32str, u64 c32str_length) {
     if (!c32str) return NULL;
 
@@ -1957,7 +1961,6 @@ String *string_from_utf32_alloc(const char32 *c32str, u64 c32str_length) {
     return s;
 }
 
-// Convert UTF-32 array into existing String buffer
 void string_from_utf32_into(const char32 *c32str, u64 c32str_length, String *string) {
     if (!string) return;
 
@@ -1986,7 +1989,6 @@ void string_from_utf32_into(const char32 *c32str, u64 c32str_length, String *str
     string->length = pos;
 }
 
-// Convert String (UTF-8) to UTF-32 array (malloc)
 char32 *string_to_utf32_alloc(const String *string) {
     if (!string || string->length == 0) return NULL;
 
@@ -2004,7 +2006,6 @@ char32 *string_to_utf32_alloc(const String *string) {
     return buffer;
 }
 
-// Convert String (UTF-8) into existing UTF-32 array
 void string_to_utf32_into(const String *string, char32 *c32str, u64 c32str_size) {
     if (!string || !c32str || c32str_size == 0) return;
 
