@@ -2474,6 +2474,937 @@ TEST(StringToUTF32Into, "String", "Conversion") {
     return 0;
 }
 
+// -- String Editor Component -------------------------------------------------
+
+TEST(StringEditorInit, "String", "StringEditor") {
+    StringEditor editor;
+
+    // Test initialization with non-zero capacity
+    string_editor_init(&editor, 16);
+    if (editor.buffer == NULL) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_NULL_VALUE,
+            "editor buffer is NULL after initialization", "");
+    }
+    if (editor.length != 0) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor length is not zero after initialization",
+            "\t-- Expected: 0\n\t-- Actual: %llu", editor.length);
+    }
+    if (editor.capacity != 16) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor capacity is incorrect",
+            "\t-- Expected: 16\n\t-- Actual: %llu", editor.capacity);
+    }
+    if (editor.default_policy != SE_ALLOC_AUTO) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor default_policy is incorrect",
+            "\t-- Expected: SE_ALLOC_AUTO\n\t-- Actual: %llu", editor.default_policy);
+    }
+
+    // Test initialization with zero capacity
+    StringEditor zero_editor;
+    string_editor_init(&zero_editor, 0);
+    if (zero_editor.buffer != NULL) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor buffer is not null for zero capacity", "");
+    }
+	if (zero_editor.length != 0) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor length is not zero for zero capacity",
+            "\t-- Expected: 0\n\t-- Actual: %llu", zero_editor.length);
+    }
+    if (zero_editor.capacity != 0) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor capacity is not zero for zero capacity",
+            "\t-- Expected: 0\n\t-- Actual: %llu", zero_editor.capacity);
+    }
+
+    // Test initialization with NULL pointer
+    string_editor_init(NULL, 16); // Should not crash or write memory
+
+    // Test repeated initialization
+    StringEditor repeated;
+    string_editor_init(&repeated, 8);
+    string_editor_init(&repeated, 32); // Re-initialize
+    if (repeated.capacity != 32) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor capacity not updated on re-initialization",
+            "\t-- Expected: 32\n\t-- Actual: %llu", repeated.capacity);
+    }
+    if (repeated.length != 0) {
+        test_case_record_error(&StringEditorInitTest, TEST_RESULT_INVALID_STATE,
+            "editor length not reset on re-initialization",
+            "\t-- Expected: 0\n\t-- Actual: %llu", repeated.length);
+    }
+
+    return 0;
+}
+
+TEST(StringEditorFree, "String", "StringEditor") {
+    // Test 1: Normal buffer
+    StringEditor editor1;
+    editor1.buffer = malloc(10);
+    memory_copy(editor1.buffer, "123456789", 9);
+    editor1.length = 9;
+    editor1.capacity = 10;
+
+string_editor_free(&editor1);
+    if (editor1.buffer != NULL) {
+        test_case_record_error(&StringEditorFreeTest, TEST_RESULT_INVALID_STATE,
+            "editor buffer not NULL after free", "");
+    }
+
+    // Test 2: NULL buffer
+    StringEditor editor2;
+    editor2.buffer = NULL;
+    editor2.length = 0;
+    editor2.capacity = 0;
+
+    string_editor_free(&editor2);
+    if (editor2.buffer != NULL) {
+        test_case_record_error(&StringEditorFreeTest, TEST_RESULT_INVALID_STATE,
+            "editor buffer not NULL after freeing NULL buffer", "");
+    }
+    
+	// Test 3: NULL editor pointer
+    StringEditor *editor3 = NULL;
+    string_editor_free(editor3);
+    // Nothing should crash, can't check fields because it's NULL
+
+    // Test 4: Free twice
+    StringEditor editor4;
+    editor4.buffer = malloc(5);
+    memory_copy(editor4.buffer, "abcd", 4);
+    editor4.length = 4;
+    editor4.capacity = 5;
+
+    string_editor_free(&editor4);
+    // Second free, should be safe
+    string_editor_free(&editor4);
+
+    if (editor4.buffer != NULL) {
+        test_case_record_error(&StringEditorFreeTest, TEST_RESULT_INVALID_STATE,
+            "editor buffer not NULL after double free", "");
+    }
+    
+	return 0;
+}
+
+TEST(StringEditorReserve, "String", "StringEditor") {
+    // Initialize editor with some capacity
+    StringEditor editor;
+    string_editor_init(&editor, 10);
+
+    if (!editor.buffer) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_NULL_VALUE,
+            "editor buffer is NULL after init", "");
+    }
+    if (editor.capacity != 10) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_INVALID_STATE,
+            "editor capacity is incorrect after init",
+            "\t-- Expected: 10\n\t-- Actual: %llu", editor.capacity);
+    }
+
+    // Test increasing capacity
+    u64 new_capacity = 20;
+    u64 returned_capacity = string_editor_reserve(&editor, new_capacity);
+    if (returned_capacity < new_capacity) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_INVALID_STATE,
+            "reserve did not increase capacity",
+            "\t-- Expected at least: %llu\n\t-- Actual: %llu", new_capacity, returned_capacity);
+    }
+    if (editor.capacity != returned_capacity) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_INVALID_STATE,
+            "editor capacity and returned capacity mismatch",
+            "\t-- Editor: %llu\n\t-- Returned: %llu", editor.capacity, returned_capacity);
+    }
+
+    // Test reserve to smaller capacity (should do nothing)
+    u64 smaller_capacity = 5;
+    returned_capacity = string_editor_reserve(&editor, smaller_capacity);
+    if (returned_capacity != editor.capacity) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_INVALID_STATE,
+            "reserve to smaller capacity changed editor capacity",
+            "\t-- Editor: %llu\n\t-- Returned: %llu", editor.capacity, returned_capacity);
+    }
+
+    // Test reserve to exact current capacity (should do nothing)
+    returned_capacity = string_editor_reserve(&editor, editor.capacity);
+    if (returned_capacity != editor.capacity) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_INVALID_STATE,
+            "reserve to current capacity changed editor capacity",
+            "\t-- Editor: %llu\n\t-- Returned: %llu", editor.capacity, returned_capacity);
+    }
+
+    // Test NULL editor
+    returned_capacity = string_editor_reserve(NULL, 100);
+    if (returned_capacity != 0) {
+        test_case_record_error(&StringEditorReserveTest, TEST_RESULT_INVALID_STATE,
+            "reserve returned non-zero for NULL editor",
+            "\t-- Actual: %llu", returned_capacity);
+    }
+
+    // Clean up
+    string_editor_free(&editor);
+
+    return 0;
+}
+
+
+TEST(StringEditorClear, "String", "StringEditor") {
+    // --- Test 1: Basic clear ---
+    const char *text = "Hello, World!";
+
+    StringEditor editor;
+    string_editor_init(&editor, 20);
+    memory_copy(editor.buffer, (void *)text, 13);
+    editor.length = 13;
+
+    string_editor_clear(&editor);
+
+    if (editor.length != 0) {
+        test_case_record_error(&StringEditorClearTest, TEST_RESULT_INVALID_STATE,
+            "editor length not zero after clear",
+            "\t-- Expected: 0\n\t-- Actual: %llu", editor.length);
+    }
+    if (!editor.buffer) {
+        test_case_record_error(&StringEditorClearTest, TEST_RESULT_NULL_VALUE,
+            "editor buffer became NULL after clear", "");
+    }
+
+    // --- Test 2: Clear already empty editor ---
+    string_editor_clear(&editor);
+
+    if (editor.length != 0) {
+        test_case_record_error(&StringEditorClearTest, TEST_RESULT_INVALID_STATE,
+            "clearing already empty editor changed length",
+            "\t-- Expected: 0\n\t-- Actual: %llu", editor.length);
+    }
+
+    // --- Test 3: Clear large editor ---
+    string_editor_free(&editor);
+    string_editor_init(&editor, 100);
+    for (u64 i = 0; i < 50; i++) editor.buffer[i] = 'A';
+    editor.length = 50;
+
+    string_editor_clear(&editor);
+
+    if (editor.length != 0) {
+        test_case_record_error(&StringEditorClearTest, TEST_RESULT_INVALID_STATE,
+            "large editor length not zero after clear",
+            "\t-- Expected: 0\n\t-- Actual: %llu", editor.length);
+    }
+
+    // --- Test 4: Null pointer ---
+    StringEditor *null_editor = NULL;
+    string_editor_clear(null_editor); // should not crash
+
+    // --- Test 5: Verify buffer content not modified (optional for clear) ---
+    memory_copy(editor.buffer, (void *)text, 13);
+    editor.length = 13;
+    string_editor_clear(&editor);
+    for (u64 i = 0; i < 13; i++) {
+        if (editor.buffer[i] != text[i]) {
+            test_case_record_error(&StringEditorClearTest, TEST_RESULT_INCORRECT_VALUE,
+                "buffer content modified by clear",
+                "\t-- Expected: %c\n\t-- Actual: %c", text[i], editor.buffer[i]);
+        }
+    }
+
+    string_editor_free(&editor);
+    return 0;
+}
+
+TEST(StringEditorShrink, "String", "StringEditor") {
+    
+	// --- Normal shrink case ---
+    StringEditor editor;
+    string_editor_init(&editor, 20);
+
+    const char *text = "Hello, World!";
+    memory_copy(editor.buffer, (void *)text, 13);
+    editor.length = 13;
+
+    u64 new_capacity = string_editor_shrink(&editor);
+    if (new_capacity != editor.length) {
+        test_case_record_error(&StringEditorShrinkTest, TEST_RESULT_INVALID_STATE,
+            "capacity after shrink is incorrect",
+            "\t-- Expected: %llu\n\t-- Actual: %llu", editor.length, new_capacity);
+    }
+    if (memory_compare(editor.buffer, text, 13) != 0) {
+        test_case_record_error(&StringEditorShrinkTest, TEST_RESULT_INCORRECT_VALUE,
+            "buffer content changed after shrink",
+            "\t-- Expected: %s\n\t-- Actual: %s", text, editor.buffer);
+    }
+
+    // --- Shrink when capacity equals length ---
+    editor.capacity = editor.length;
+    new_capacity = string_editor_shrink(&editor);
+    if (new_capacity != editor.length) {
+        test_case_record_error(&StringEditorShrinkTest, TEST_RESULT_INVALID_STATE,
+            "shrink should not change capacity when capacity == length",
+            "\t-- Expected: %llu\n\t-- Actual: %llu", editor.length, new_capacity);
+    }
+
+    // --- Shrink on empty editor ---
+    StringEditor empty_editor;
+    string_editor_init(&empty_editor, 10);
+    empty_editor.length = 0;
+    new_capacity = string_editor_shrink(&empty_editor);
+    if (new_capacity != 0) {
+        test_case_record_error(&StringEditorShrinkTest, TEST_RESULT_INVALID_STATE,
+            "shrink should reduce empty editor capacity to 0",
+            "\t-- Expected: 0\n\t-- Actual: %llu", new_capacity);
+    }
+    
+	// --- Shrink with NULL buffer ---
+    StringEditor null_buffer_editor;
+    null_buffer_editor.buffer = NULL;
+    null_buffer_editor.length = 5;
+    null_buffer_editor.capacity = 10;
+    new_capacity = string_editor_shrink(&null_buffer_editor);
+    if (new_capacity != 0) {
+        test_case_record_error(&StringEditorShrinkTest, TEST_RESULT_INVALID_STATE,
+            "shrink should return 0 when buffer is NULL",
+            "\t-- Expected: 0\n\t-- Actual: %llu", new_capacity);
+    }
+
+    string_editor_free(&editor);
+    string_editor_free(&empty_editor);
+ 
+	return 0;
+}
+
+TEST(StringEditorCopy, "String", "StringEditor") {
+    // --- Case 1: NULL input ---
+    StringEditor *copy = string_editor_copy(NULL);
+    if (copy != NULL) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+            "copy of NULL editor should be NULL", "");
+    }
+
+    // --- Case 2: Empty editor ---
+    StringEditor empty;
+    empty.buffer = NULL;
+    empty.length = 0;
+    empty.capacity = 0;
+    empty.default_policy = SE_ALLOC_NONE;
+
+    copy = string_editor_copy(&empty);
+    if (!copy) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_NULL_VALUE,
+            "copy returned NULL for empty editor", "");
+    } else {
+        if (copy->buffer != NULL) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+                "buffer should be NULL for empty editor copy", "");
+        }
+        if (copy->length != 0 || copy->capacity != 0) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+                "length or capacity incorrect for empty editor copy",
+                "\t-- Expected length: 0, capacity: 0\n\t-- Actual length: %llu, capacity: %llu",
+                copy->length, copy->capacity);
+        }
+        if (copy->default_policy != SE_ALLOC_AUTO) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+                "default_policy should be SE_ALLOC_AUTO", "");
+        }
+        memory_free(copy);
+    }
+
+    // --- Case 3: Editor with content ---
+    const char *text = "Hello, World!";
+    StringEditor editor;
+    editor.length = 13;
+    editor.capacity = 13;
+    editor.buffer = malloc(13);
+    memory_copy(editor.buffer, (void *) text, 13);
+    editor.default_policy = SE_ALLOC_NONE;
+
+    copy = string_editor_copy(&editor);
+    if (!copy) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_NULL_VALUE,
+            "copy returned NULL for non-empty editor", "");
+    } else {
+        // Check content
+        if (!copy->buffer) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_NULL_VALUE,
+                "buffer in copy is NULL", "");
+        } else if (memory_compare(copy->buffer, editor.buffer, 13) != 0) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INCORRECT_VALUE,
+                "buffer content incorrect",
+                "\t-- Expected: %s\n\t-- Actual: %s", editor.buffer, copy->buffer);
+        }
+
+        // Check length and capacity
+        if (copy->length != editor.length || copy->capacity != editor.length) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+                "length or capacity incorrect",
+                "\t-- Expected length: %llu, capacity: %llu\n\t-- Actual length: %llu, capacity: %llu",
+                editor.length, editor.length, copy->length, copy->capacity);
+        }
+
+        // Check default policy
+        if (copy->default_policy != SE_ALLOC_AUTO) {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+                "default_policy not set to SE_ALLOC_AUTO", "");
+        }
+
+        // Check memory independence
+        copy->buffer[0] = 'h';
+        if (editor.buffer[0] == 'h') {
+            test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+                "copy buffer modifies original buffer", "");
+        }
+
+        memory_free(copy);
+    }
+
+    // --- Case 4: Large buffer test ---
+    u64 large_size = 1024 * 1024; // 1 MB
+    StringEditor large;
+    large.length = large_size;
+    large.capacity = large_size;
+    large.buffer = malloc(large_size);
+    for (u64 i = 0; i < large_size; i++) {
+        large.buffer[i] = (char)(i % 256);
+    }
+    large.default_policy = SE_ALLOC_NONE;
+
+    copy = string_editor_copy(&large);
+    if (!copy || !copy->buffer) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_NULL_VALUE,
+            "copy failed for large buffer", "");
+    } else if (memory_compare(copy->buffer, large.buffer, large_size) != 0) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INCORRECT_VALUE,
+            "large buffer copy incorrect", "");
+    }
+    memory_free(copy);
+    free(large.buffer);
+
+    // --- Case 5: Zero-length buffer but non-NULL pointer ---
+    StringEditor zero_buffer;
+    zero_buffer.buffer = malloc(1);
+    zero_buffer.length = 0;
+    zero_buffer.capacity = 1;
+    zero_buffer.default_policy = SE_ALLOC_NONE;
+
+    copy = string_editor_copy(&zero_buffer);
+    if (!copy) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_NULL_VALUE,
+            "copy returned NULL for zero-length buffer", "");
+    } else if (copy->buffer != NULL) {
+        test_case_record_error(&StringEditorCopyTest, TEST_RESULT_INVALID_STATE,
+            "copy buffer should be NULL for zero-length input", "");
+    }
+    memory_free(copy);
+    free(zero_buffer.buffer);
+
+    return 0;
+}
+
+TEST(StringEditorSlice, "String", "StringEditor") {
+    const char *text = "The quick brown fox jumps";
+
+    StringEditor editor;
+    string_editor_init(&editor, 32);
+    memory_copy(editor.buffer, (void *)text, 25);
+    editor.length = 25;
+    editor.capacity = 32;
+    editor.default_policy = SE_ALLOC_NONE;
+
+    // slice from start
+    StringEditor slice = string_editor_slice(&editor, 0, 3);
+    if (slice.buffer == NULL) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_NULL_VALUE,
+            "slice is NULL", "");
+    }
+    if (slice.length != 3) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INVALID_STATE,
+            "slice length incorrect",
+            "\t-- Expected: 3\n\t-- Actual: %llu", slice.length);
+    }
+    if (memory_compare(slice.buffer, editor.buffer, 3) != 0) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "slice contains incorrect memory",
+            "\t-- Expected: The\n\t-- Actual: %.*s", (int)slice.length, slice.buffer);
+    }
+
+    // slice from middle
+    slice = string_editor_slice(&editor, 4, 9);
+    if (slice.length != 5 || memory_compare(slice.buffer, editor.buffer + 4, 5) != 0) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "middle slice incorrect",
+            "\t-- Expected: quick\n\t-- Actual: %.*s", (int)slice.length, slice.buffer);
+    }
+
+    // slice to end
+    slice = string_editor_slice(&editor, 16, 100);
+    if (slice.length != 9 || memory_compare(slice.buffer, editor.buffer + 16, 9) != 0) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "slice to end incorrect",
+            "\t-- Expected: fox jumps\n\t-- Actual: %.*s", (int)slice.length, slice.buffer);
+    }
+
+    // empty slice (start == end)
+    slice = string_editor_slice(&editor, 5, 5);
+    if (slice.length != 0) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INVALID_STATE,
+            "empty slice length incorrect",
+            "\t-- Expected: 0\n\t-- Actual: %llu", slice.length);
+    }
+
+    // slice beyond bounds (start > length)
+    slice = string_editor_slice(&editor, 50, 60);
+    if (slice.length != 0) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INVALID_STATE,
+            "out-of-bounds slice length incorrect",
+            "\t-- Expected: 0\n\t-- Actual: %llu", slice.length);
+    }
+
+    // single-character slice
+    slice = string_editor_slice(&editor, 10, 11);
+    if (slice.length != 1 || memory_compare(slice.buffer, editor.buffer + 10, 1) != 0) {
+        test_case_record_error(&StringEditorSliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "single-character slice incorrect",
+            "\t-- Expected: %c\n\t-- Actual: %.*s", editor.buffer[10], (int)slice.length, slice.buffer);
+    }
+
+    string_editor_free(&editor);
+    return 0;
+}
+
+TEST(StringEditorCopySlice, "String", "StringEditor") {
+    const char *text = "Hello, World!";
+    
+    // Initialize a StringEditor and fill it
+    StringEditor editor;
+    string_editor_init(&editor, 20);
+    memory_copy(editor.buffer, (void *) text, 13);
+    editor.length = 13;
+
+    // --- Normal slice ---
+    StringEditor *slice_copy = string_editor_copy_slice(&editor, 0, 5);
+    if (!slice_copy || !slice_copy->buffer) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_NULL_VALUE,
+            "slice copy is NULL", "");
+    }
+    if (slice_copy->length != 5) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+            "slice copy length is incorrect",
+            "\t-- Expected: 5\n\t-- Actual %llu", slice_copy->length);
+    }
+    if (memory_compare(slice_copy->buffer, editor.buffer, 5) != 0) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "slice copy memory incorrect",
+            "\t-- Expected: Hello\n\t-- Actual: %.*s", (int)slice_copy->length, slice_copy->buffer);
+    }
+    string_editor_free(slice_copy);
+
+    // --- Slice from middle ---
+    slice_copy = string_editor_copy_slice(&editor, 7, 12);
+    if (!slice_copy || !slice_copy->buffer) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_NULL_VALUE,
+            "slice copy is NULL", "");
+    }
+    if (slice_copy->length != 5) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+            "slice copy length is incorrect",
+            "\t-- Expected: 5\n\t-- Actual %llu", slice_copy->length);
+    }
+    if (memory_compare(slice_copy->buffer, editor.buffer + 7, 5) != 0) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "slice copy memory incorrect",
+            "\t-- Expected: World\n\t-- Actual: %.*s", (int)slice_copy->length, slice_copy->buffer);
+    }
+    string_editor_free(slice_copy);
+
+    // --- Slice beyond length ---
+    slice_copy = string_editor_copy_slice(&editor, 0, 40);
+    if (!slice_copy || !slice_copy->buffer) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_NULL_VALUE,
+            "slice copy is NULL", "");
+    }
+    if (slice_copy->length != 13) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+            "slice copy length incorrect",
+            "\t-- Expected: 13\n\t-- Actual %llu", slice_copy->length);
+    }
+    if (memory_compare(slice_copy->buffer, editor.buffer, 13) != 0) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INCORRECT_VALUE,
+            "slice copy memory incorrect",
+            "\t-- Expected: Hello, World!\n\t-- Actual: %.*s", (int)slice_copy->length, slice_copy->buffer);
+    }
+    string_editor_free(slice_copy);
+
+    // --- Empty slice ---
+    slice_copy = string_editor_copy_slice(&editor, 5, 5);
+    if (!slice_copy) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_NULL_VALUE,
+            "empty slice copy is NULL", "");
+    }
+	if (slice_copy->buffer != NULL) {
+		test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"slice_copy buffer should be NULL after copying an empty slice", "");
+	}
+    if (slice_copy->length != 0) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+            "empty slice length incorrect",
+            "\t-- Expected: 0\n\t-- Actual %llu", slice_copy->length);
+    }
+    string_editor_free(slice_copy);
+
+    // --- Slice starting beyond end ---
+    slice_copy = string_editor_copy_slice(&editor, 20, 25);
+    if (!slice_copy) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_NULL_VALUE,
+            "slice starting beyond end is NULL", "");
+    }
+	if (slice_copy->buffer != NULL) {
+		test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+			"slice buffer should be NULL after copying invalid slice", "");
+	}
+    if (slice_copy->length != 0) {
+        test_case_record_error(&StringEditorCopySliceTest, TEST_RESULT_INVALID_STATE,
+            "slice starting beyond end length incorrect",
+            "\t-- Expected: 0\n\t-- Actual %llu", slice_copy->length);
+    }
+    string_editor_free(slice_copy);
+
+    string_editor_free(&editor);
+    return 0;
+}
+
+TEST(StringEditorCopySliceInto, "String", "StringEditor") {
+    const char *text = "Hello, World!";
+
+    StringEditor src;
+    string_editor_init(&src, 20);
+    memory_copy(src.buffer, text, 13);
+    src.length = 13;
+
+    StringEditor dst;
+    string_editor_init(&dst, 5); // deliberately smaller for truncation test
+
+    // --- Basic copy within capacity ---
+    SE_Result result = string_editor_copy_slice_into(&src, 0, 5, &dst);
+    if (result != SE_SUCCESS) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into returned wrong result for full copy",
+            "\t-- Expected: SE_SUCCESS\n\t-- Actual: %d", result);
+    }
+    if (dst.length != 5) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "dst length incorrect after copy",
+            "\t-- Expected: 5\n\t-- Actual: %llu", dst.length);
+    }
+    if (memory_compare(dst.buffer, src.buffer, 5) != 0) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "dst buffer contains incorrect data",
+            "\t-- Expected: Hello\n\t-- Actual: %.*s", (int)dst.length, dst.buffer);
+    }
+
+    // --- Copy exceeding destination capacity (truncated) ---
+    result = string_editor_copy_slice_into(&src, 0, 10, &dst);
+    if (result != SE_TRUNCATED) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into returned wrong result for truncated copy",
+            "\t-- Expected: SE_TRUNCATED\n\t-- Actual: %d", result);
+    }
+    if (dst.length != dst.capacity) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "dst length incorrect after truncated copy",
+            "\t-- Expected: %llu\n\t-- Actual: %llu", dst.capacity, dst.length);
+    }
+    if (memory_compare(dst.buffer, src.buffer, dst.capacity) != 0) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "dst buffer contains incorrect data after truncation",
+            "\t-- Expected: Hello\n\t-- Actual: %.*s", (int)dst.length, dst.buffer);
+    }
+
+    // --- Copy with start > end (should produce empty slice) ---
+    dst.length = 0; // reset
+    result = string_editor_copy_slice_into(&src, 5, 2, &dst);
+    if (result != SE_SUCCESS) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into returned wrong result for empty slice",
+            "\t-- Expected: SE_SUCCESS\n\t-- Actual: %d", result);
+    }
+    if (dst.length != 0) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "dst length incorrect for empty slice",
+            "\t-- Expected: 0\n\t-- Actual: %llu", dst.length);
+    }
+
+    // --- Copy from full range ---
+    string_editor_reserve(&dst, 20); // ensure enough capacity
+    result = string_editor_copy_slice_into(&src, 0, 13, &dst);
+    if (result != SE_SUCCESS) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into failed for full range copy",
+            "\t-- Expected: SE_SUCCESS\n\t-- Actual: %d", result);
+    }
+    if (dst.length != 13) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "dst length incorrect after full range copy",
+            "\t-- Expected: 13\n\t-- Actual: %llu", dst.length);
+    }
+    if (memory_compare(dst.buffer, src.buffer, 13) != 0) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INCORRECT_VALUE,
+            "dst buffer contains incorrect data after full range copy",
+            "\t-- Expected: Hello, World!\n\t-- Actual: %.*s", (int)dst.length, dst.buffer);
+    }
+
+    // --- Null pointer tests ---
+    result = string_editor_copy_slice_into(NULL, 0, 5, &dst);
+    if (result != SE_ERROR) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into did not return SE_ERROR for NULL source editor",
+            "\t-- Actual: %d", result);
+    }
+    result = string_editor_copy_slice_into(&src, 0, 5, NULL);
+    if (result != SE_ERROR) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into did not return SE_ERROR for NULL destination editor",
+            "\t-- Actual: %d", result);
+    }
+
+    // --- Null buffer tests ---
+    StringEditor null_buffer_editor = {NULL, 0, 5, SE_ALLOC_AUTO};
+    result = string_editor_copy_slice_into(&null_buffer_editor, 0, 5, &dst);
+    if (result != SE_ERROR) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into did not return SE_ERROR for NULL source buffer",
+            "\t-- Actual: %d", result);
+    }
+    null_buffer_editor = src;
+    null_buffer_editor.buffer = NULL;
+    result = string_editor_copy_slice_into(&src, 0, 5, &null_buffer_editor);
+    if (result != SE_ERROR) {
+        test_case_record_error(&StringEditorCopySliceIntoTest, TEST_RESULT_INVALID_STATE,
+            "copy_slice_into did not return SE_ERROR for NULL destination buffer",
+            "\t-- Actual: %d", result);
+    }
+
+    string_editor_free(&src);
+    string_editor_free(&dst);
+
+    return 0;
+}
+
+
+TEST(StringEditorInsert, "String", "StringEditor") {
+	// --- Setup helper strings ---
+	const char *hello = "Hello";
+	const char *world = "World";
+	const char *longtext = "ABCDEFGHIJ";
+
+	String s1 = { (char *)hello, 5 };
+	String s2 = { (char *)world, 5 };
+	String s_long = { (char *)longtext, 10 };
+
+	// --- Case 1: NULL editor ---
+	if (string_editor_insert(NULL, 0, &s1, SE_ALLOC_AUTO) != SE_ERROR) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INVALID_STATE,
+			"insert did not fail with NULL editor", "");
+	}
+
+	// --- Case 2: NULL string ---
+	StringEditor e2;
+	string_editor_init(&e2, 16);
+	if (string_editor_insert(&e2, 0, NULL, SE_ALLOC_AUTO) != SE_ERROR) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INVALID_STATE,
+			"insert did not fail with NULL string", "");
+	}
+	string_editor_free(&e2);
+
+	// --- Case 3: insert with SE_ALLOC_NONE and not enough space ---
+	StringEditor e3;
+	string_editor_init(&e3, 4); // smaller than "Hello"
+	SE_Result r3 = string_editor_insert(&e3, 0, &s1, SE_ALLOC_NONE);
+	if (r3 != SE_TRUNCATED && r3 != SE_NO_SPACE) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"insert with SE_ALLOC_NONE should fail or truncate", "");
+	}
+	string_editor_free(&e3);
+
+	// --- Case 4: insert with SE_ALLOC_AUTO grows buffer ---
+	StringEditor e4;
+	string_editor_init(&e4, 4);
+	SE_Result r4 = string_editor_insert(&e4, 0, &s1, SE_ALLOC_AUTO);
+	if (r4 != SE_SUCCESS) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"insert with SE_ALLOC_AUTO should succeed", "");
+	}
+	if (e4.length != 5 || memory_compare(e4.buffer, hello, 5) != 0) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"buffer after insert is wrong", 
+			"\t-- Expected: Hello\n\t-- Actual: %.*s", (int)e4.length, e4.buffer);
+	}
+	string_editor_free(&e4);
+
+	// --- Case 5: insert at end (append) ---
+	StringEditor e5;
+	string_editor_init(&e5, 16);
+	string_editor_insert(&e5, 0, &s1, SE_ALLOC_AUTO); // "Hello"
+	string_editor_insert(&e5, e5.length, &s2, SE_ALLOC_AUTO); // append "World"
+	if (e5.length != 10 || memory_compare(e5.buffer, "HelloWorld", 10) != 0) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"append failed", 
+			"\t-- Expected: HelloWorld\n\t-- Actual: %.*s", (int)e5.length, e5.buffer);
+	}
+	string_editor_free(&e5);
+
+	// --- Case 6: insert in middle (shift right) ---
+	StringEditor e6;
+	string_editor_init(&e6, 16);
+	string_editor_insert(&e6, 0, &s1, SE_ALLOC_AUTO); // "Hello"
+	string_editor_insert(&e6, 2, &s2, SE_ALLOC_AUTO); // "HeWorldllo"
+	if (e6.length != 10 || memory_compare(e6.buffer, "HeWorldllo", 10) != 0) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"middle insert failed",
+			"\t-- Expected: HeWorldllo\n\t-- Actual: %.*s", (int)e6.length, e6.buffer);
+	}
+	string_editor_free(&e6);
+
+	// --- Case 7: insert beyond end (zero padding) ---
+	StringEditor e7;
+	string_editor_init(&e7, 16);
+	string_editor_insert(&e7, 10, &s1, SE_ALLOC_AUTO); 
+	// should create 5 bytes "Hello" at index 10, zero padding from [0..9]
+	for (u64 i = 0; i < 10; i++) {
+		if (e7.buffer[i] != 0) {
+			test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+				"padding bytes not zero", "");
+			break;
+		}
+	}
+	if (memory_compare(e7.buffer + 10, "Hello", 5) != 0) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"inserted data incorrect at offset", "");
+	}
+	string_editor_free(&e7);
+
+	// --- Case 8: truncation when string longer than capacity ---
+	StringEditor e8;
+	string_editor_init(&e8, 5); // exactly 5 bytes capacity
+	SE_Result r8 = string_editor_insert(&e8, 0, &s_long, SE_ALLOC_NONE);
+	if (r8 != SE_TRUNCATED) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"long insert should truncate", "");
+	}
+	if (e8.length != 5 || memory_compare(e8.buffer, "ABCDE", 5) != 0) {
+		test_case_record_error(&StringEditorInsertTest, TEST_RESULT_INCORRECT_VALUE,
+			"buffer after truncation incorrect",
+			"\t-- Expected: ABCDE\n\t-- Actual: %.*s", (int)e8.length, e8.buffer);
+	}
+	string_editor_free(&e8);
+
+	return 0;
+}
+
+TEST(StringEditorReplace, "String", "StringEditor") {
+	const char *hello = "Hello";
+	const char *world = "World";
+	const char *longtext = "ABCDEFGHIJ";
+
+	String s_hello = { (char *)hello, 5 };
+	String s_world = { (char *)world, 5 };
+	String s_long  = { (char *)longtext, 10 };
+
+	// --- Case 1: NULL editor ---
+	if (string_editor_replace(NULL, 0, &s_hello, SE_ALLOC_AUTO) != SE_ERROR) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INVALID_STATE,
+			"replace did not fail with NULL editor", "");
+	}
+
+	// --- Case 2: NULL string ---
+	StringEditor e2;
+	string_editor_init(&e2, 16);
+	if (string_editor_replace(&e2, 0, NULL, SE_ALLOC_AUTO) != SE_ERROR) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INVALID_STATE,
+			"replace did not fail with NULL string", "");
+	}
+	string_editor_free(&e2);
+
+	// --- Case 3: write with SE_ALLOC_NONE, not enough space ---
+	StringEditor e3;
+	string_editor_init(&e3, 4);
+	if (string_editor_replace(&e3, 10, &s_hello, SE_ALLOC_NONE) != SE_NO_SPACE) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"replace starting buffer length with SE_ALLOC_NONE and insufficient capacity should fail", "");
+	}
+	string_editor_free(&e3);
+
+	// --- Case 4: replace within existing buffer (in-place) ---
+	StringEditor e4;
+	string_editor_init(&e4, 16);
+	string_editor_replace(&e4, 0, &s_hello, SE_ALLOC_AUTO); // "Hello"
+	string_editor_replace(&e4, 1, &s_world, SE_ALLOC_AUTO); // Replace starting at 'e'
+	if (memory_compare(e4.buffer, "HWorld", 6) != 0) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"in-place replace failed",
+			"\t-- Expected: HWorld\n\t-- Actual: %.*s", (int)e4.length, e4.buffer);
+	}
+	string_editor_free(&e4);
+
+	// --- Case 5: replace beyond end (extends length) ---
+	StringEditor e5;
+	string_editor_init(&e5, 16);
+	string_editor_replace(&e5, 0, &s_hello, SE_ALLOC_AUTO); // "Hello"
+	string_editor_replace(&e5, 10, &s_world, SE_ALLOC_AUTO); 
+	// Expected: "Hello" + 5 undefined padding + "World"
+	if (e5.length != 15) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INVALID_STATE,
+			"replace beyond end did not update length correctly",
+			"\t-- Expected: 15\n\t-- Actual: %llu", e5.length);
+	}
+	if (memory_compare(e5.buffer + 10, "World", 5) != 0) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"replace beyond end content incorrect", "");
+	}
+	string_editor_free(&e5);
+
+	// --- Case 6: replace requires allocation (SE_ALLOC_AUTO) ---
+	StringEditor e6;
+	string_editor_init(&e6, 2); // too small
+	SE_Result r6 = string_editor_replace(&e6, 0, &s_hello, SE_ALLOC_AUTO);
+	if (r6 != SE_SUCCESS || memory_compare(e6.buffer, "Hello", 5) != 0) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"replace with auto alloc failed", "");
+	}
+	string_editor_free(&e6);
+
+	// --- Case 7: truncation when string longer than capacity ---
+	StringEditor e7;
+	string_editor_init(&e7, 5);
+	SE_Result r7 = string_editor_replace(&e7, 0, &s_long, SE_ALLOC_NONE);
+	if (r7 != SE_TRUNCATED) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"replace should return TRUNCATED", "");
+	}
+	if (memory_compare(e7.buffer, "ABCDE", 5) != 0) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"truncate content incorrect",
+			"\t-- Expected: ABCDE\n\t-- Actual: %.*s", (int)e7.length, e7.buffer);
+	}
+	string_editor_free(&e7);
+
+	// --- Case 8: replace extends length correctly ---
+	StringEditor e8;
+	string_editor_init(&e8, 16);
+	string_editor_replace(&e8, 0, &s_world, SE_ALLOC_AUTO); // "World"
+	string_editor_replace(&e8, 5, &s_hello, SE_ALLOC_AUTO); // Replace immediately after
+	if (memory_compare(e8.buffer, "WorldHello", 10) != 0) {
+		test_case_record_error(&StringEditorReplaceTest, TEST_RESULT_INCORRECT_VALUE,
+			"replace at end did not append properly",
+			"\t-- Expected: WorldHello\n\t-- Actual: %.*s", (int)e8.length, e8.buffer);
+	}
+	string_editor_free(&e8);
+
+	return 0;
+}
+
 //=============================================================================
 // Math Module
 //=============================================================================
