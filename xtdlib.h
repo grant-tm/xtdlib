@@ -426,16 +426,16 @@ void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_
 // STRING DECLARATIONS 
 //=============================================================================
 
+// -- STRING TYPE -------------------------------------------------------------
+
 typedef struct String {
     char *value;
-    u64 length;
+    u64 length;	
 } String;
 
-#define STRING_START(string) (((string).length) ? ((string).value[(string).length]) : NULL)
-#define STRING_END(string) ((string).value)
+#define STRING_START(string) ((string).value)
+#define STRING_END(string) (((string).length) ? ((string).value[(string).length]) : NULL)
 #define STRING_INVALID_INDEX ((u64) -1)
-
-// -- string ------------------------------------
 
 String string_slice (const String *s, u64 start, u64 end);
 
@@ -452,11 +452,6 @@ u64 string_find_last_char (const String *s, const char c);
 
 u64 string_find_next_substring (const String *s, const String *substr);
 u64 string_find_last_substring (const String *s, const String *substr);
-
-// u64 string_find_next_regex (const String *s, const String *regex);
-// u64 string_find_last_regex (const String *s, const String *regex);
-
-// -- conversion --------------------------------
 
 String string_from_cstr (const char *cstr, u64 cstr_size);
 String *string_from_cstr_alloc (const char *cstr, u64 cstr_size);
