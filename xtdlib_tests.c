@@ -1993,42 +1993,6 @@ TEST(StringToCStrInto, "String", "Conversion") {
     return 0;
 }
 
-TEST(StringFromWStr, "String", "Conversion") {
-    const wchar *text1 = L"Hello, World!";
-    const wchar *text2 = L"";
-    const wchar *text3 = NULL;
-
-    // Non-empty string
-    String s1 = string_from_wstr(text1, 13);
-    wchar *buf1 = string_to_wstr_alloc(&s1);
-    if (s1.length == 0 || !s1.value || !buf1 || memory_compare(buf1, text1, 13) != 0) {
-        test_case_record_error(&StringFromWStrTest, TEST_RESULT_INCORRECT_VALUE,
-            "failed to construct string from valid wchar string",
-            "\t-- Expected length: 13\n\t-- Actual length: %llu", s1.length);
-    }
-    free(s1.value);
-    free(buf1);
-
-    // Empty string
-    String s2 = string_from_wstr(text2, 0);
-    if (s2.length != 0 || !s2.value) {
-        test_case_record_error(&StringFromWStrTest, TEST_RESULT_INCORRECT_VALUE,
-            "failed to construct string from empty wchar string",
-            "\t-- Expected length: 0\n\t-- Actual length: %llu", s2.length);
-    }
-    free(s2.value);
-
-    // NULL string
-    String s3 = string_from_wstr(text3, 0);
-    if (s3.length != 0 || s3.value != NULL) {
-        test_case_record_error(&StringFromWStrTest, TEST_RESULT_INCORRECT_VALUE,
-            "failed to handle NULL wchar string",
-            "\t-- Expected: NULL\n\t-- Actual: %p", s3.value);
-    }
-
-    return 0;
-}
-
 TEST(StringFromWStrAlloc, "String", "Conversion") {
     const wchar *text1 = L"Hello, World!";
     const wchar *text2 = L"";
@@ -2198,37 +2162,6 @@ TEST(StringToWStrInto, "String", "Conversion") {
     return 0;
 }
 
-TEST(StringFromUTF16, "String", "Conversion") {
-    // Sample UTF-16 data: ASCII, BMP, and surrogate pair (😊 U+1F60A)
-    char16 text1[] = { 'H','e','l','l','o', 0x0020, 0x0041, 0xD83D, 0xDE0A }; // "Hello A😊"
-    char16 text2[] = {0}; // empty
-    char16 *text3 = NULL;
-
-    // Non-empty UTF-16
-    String s1 = string_from_utf16(text1, sizeof(text1)/sizeof(char16));
-    if (s1.length == 0 || !s1.value) {
-        test_case_record_error(&StringFromUTF16Test, TEST_RESULT_INCORRECT_VALUE,
-            "failed to construct string from valid UTF-16", "");
-    }
-
-    // Empty UTF-16
-    String s2 = string_from_utf16(text2, 0);
-    if (s2.length != 0 || s2.value != NULL) {
-        test_case_record_error(&StringFromUTF16Test, TEST_RESULT_INCORRECT_VALUE,
-            "failed to construct string from empty UTF-16", "");
-    }
-
-    // NULL UTF-16
-    String s3 = string_from_utf16(text3, 0);
-    if (s3.length != 0 || s3.value != NULL) {
-        test_case_record_error(&StringFromUTF16Test, TEST_RESULT_INCORRECT_VALUE,
-            "failed to handle NULL UTF-16",
-            "\t-- Actual value: %p", s3.value);
-    }
-
-    return 0;
-}
-
 TEST(StringFromUTF16Alloc, "String", "Conversion") {
     char16 text1[] = { 'T','e','s','t',0x20,0xD83D,0xDE03 }; // "Test 😃"
     char16 text2[] = {0};
@@ -2334,37 +2267,6 @@ TEST(StringToUTF16Into, "String", "Conversion") {
     if (buffer[0] != 'H' || buffer[5] == 0) {
         test_case_record_error(&StringToUTF16IntoTest, TEST_RESULT_INCORRECT_VALUE,
             "failed to copy String into UTF-16 buffer", "");
-    }
-
-    return 0;
-}
-
-TEST(StringFromUTF32, "String", "Conversion") {
-    // Sample UTF-32 data: ASCII, BMP, and non-BMP (😊 U+1F60A)
-    char32 text1[] = { 'H','e','l','l','o', 0x0020, 0x0041, 0x1F60A }; // "Hello A😊"
-    char32 text2[] = {0}; // empty
-    char32 *text3 = NULL;
-
-    // Non-empty UTF-32
-    String s1 = string_from_utf32(text1, sizeof(text1)/sizeof(char32));
-    if (s1.length == 0 || !s1.value) {
-        test_case_record_error(&StringFromUTF32Test, TEST_RESULT_INCORRECT_VALUE,
-            "failed to construct string from valid UTF-32", "");
-    }
-
-    // Empty UTF-32
-    String s2 = string_from_utf32(text2, 0);
-    if (s2.length != 0 || s2.value != NULL) {
-        test_case_record_error(&StringFromUTF32Test, TEST_RESULT_INCORRECT_VALUE,
-            "failed to construct string from empty UTF-32", "");
-    }
-
-    // NULL UTF-32
-    String s3 = string_from_utf32(text3, 0);
-    if (s3.length != 0 || s3.value != NULL) {
-        test_case_record_error(&StringFromUTF32Test, TEST_RESULT_INCORRECT_VALUE,
-            "failed to handle NULL UTF-32",
-            "\t-- Actual value: %p", s3.value);
     }
 
     return 0;

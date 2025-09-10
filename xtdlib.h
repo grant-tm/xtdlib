@@ -557,6 +557,9 @@ typedef struct String {
 
 #define STRING_START(string) ((string).value)
 #define STRING_END(string) (((string).length) ? ((string).value[(string).length]) : NULL)
+#define STRPTR_START(string) ((string)->value)
+#define STRPTR_END(string) (((string)->length) ? ((string)->value[(string)->length]) : NULL)
+
 #define STRING_INVALID_INDEX ((u64) -1)
 
 String string_slice (const String *s, u64 start, u64 end);
@@ -575,35 +578,36 @@ u64 string_find_last_char (const String *s, const char c);
 u64 string_find_next_substring (const String *s, const String *substr);
 u64 string_find_last_substring (const String *s, const String *substr);
 
-String string_from_cstr (const char *cstr, u64 cstr_size);
-String *string_from_cstr_alloc (const char *cstr, u64 cstr_size);
-void string_from_cstr_into (const char *cstr, u64 cstr_size, String *string);
-
+// to / from c string
 char *string_to_cstr_alloc (const String *string);
 void string_to_cstr_into (const String *string, char *cstr, u64 cstr_size);
 
-String string_from_wstr (const wchar *wstr, u64 wstr_size);
-String *string_from_wstr_alloc (const wchar *wstr, u64 wstr_size);
-void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string, u64 string_capacity); 
+String string_from_cstr (const char *cstr, u64 cstr_size); // non-owning; cstr_size should NOT include null-terminator
+String *string_from_cstr_alloc (const char *cstr, u64 cstr_size);
+void string_from_cstr_into (const char *cstr, u64 cstr_size, String *string);
 
+// to / from wchar string
 wchar *string_to_wstr_alloc (const String *string);
 void string_to_wstr_into (const String *string, wchar *wstr, u64 wstr_size);
 
-String string_from_utf16 (const char16 *c16str, u64 c16str_size);
+String *string_from_wstr_alloc (const wchar *wstr, u64 wstr_size);
+void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string, u64 string_capacity); 
+
+// to / from utf-16
+char16 *string_to_utf16_alloc (const String *string);
+void string_to_utf16_into (const String *string, char16 *c16str, u64 c16str_size); 
+
 String *string_from_utf16_alloc (const char16 *c16str, u64 c16str_size);
 void string_from_utf16_into (const char16 *c16str, u64 c16str_size, String *string);
 
-char16 *string_to_utf16_alloc (const String *string);
-void string_to_utf16_into (const String *string, char16 *c16str, u64 c16str_size);
-
-String string_from_utf32 (const char32 *c32str, u64 c32str_length);
-String *string_from_utf32_alloc (const char32 *c32str, u64 c32str_length);
-void string_from_utf32_into (const char32 *c32str, u64 c32str_length, String *string);
-
+// to / from utf-32
 char32 *string_to_utf32_alloc (const String *string);
 void string_to_utf32_into (const String *string, char32 *c32str, u64 c32str_size);
 
-String string_from_format (const char* fmt, ...);
+String *string_from_utf32_alloc (const char32 *c32str, u64 c32str_length);
+void string_from_utf32_into (const char32 *c32str, u64 c32str_length, String *string);
+
+// from format
 String *string_from_format_alloc (const char *fmt, ...);
 void string_from_format_into (String *string, const char *fmt, ...);
 
@@ -622,7 +626,7 @@ typedef enum SE_AllocationFlags {
 
 typedef enum SE_SearchFlags {
 	// iteration direction: use 1st bit (mask = 0b01)
-	SE_ITER_MASK     = 0x01, 
+	STRING_ITER_MASK = 0x01,
 	SE_ITER_FORWARD  = 0x00,
 	SE_ITER_BACKWARD = 0x01,
 	// case sensitivity: use the next bit (mask = 0b10)
@@ -1835,9 +1839,7 @@ u64 string_find_last_substring (const String *s, const String *substr) {
     return STRING_INVALID_INDEX;
 }
 
-// -- conversion --------------------------------------------------------------
-
-// -- cstr ------------------
+// -- c-string conversion -----------------------------------------------------
 
 String string_from_cstr (const char *cstr, u64 cstr_size) {
     if (!cstr) {
@@ -1914,11 +1916,10 @@ String string_from_wstr (const wchar *wstr, u64 wstr_size) {
 String *string_from_wstr_alloc (const wchar *wstr, u64 wstr_size) {
     if (!wstr) { return NULL; }
 
-    // Allocate the String struct itself
     String *s = (String *) memory_allocate(sizeof(String));
     if (!s) { return NULL; }
 
-    // Worst-case buffer size: 4 bytes per wchar
+    // worst-case buffer size: 4 bytes per wchar
     u64 max_bytes = wstr_size * 4;
     char *buffer = (char *) memory_allocate(max_bytes);
     if (!buffer) {
@@ -1941,7 +1942,7 @@ void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string, u6
         return;
     }
 
-	// Worst-case buffer size: 4 bytes per wchar
+	// worst-case buffer size: 4 bytes per wchar
     u64 max_bytes = wstr_size * 4;
     char *buffer = (char *) memory_allocate(max_bytes);
     if (!buffer) {
@@ -1959,7 +1960,7 @@ void string_from_wstr_into (const wchar *wstr, u64 wstr_size, String *string, u6
 wchar *string_to_wstr_alloc (const String *string) {
     if (!string || !string->value || string->length == 0) { return NULL; }
 
-    // Worst case: 1 wchar per codepoint (or surrogate pair handled on Windows)
+    // worst case: 1 wchar per codepoint (or surrogate pair handled on Windows)
     u64 max_wchars = string->length;
     wchar *buffer = (wchar *) memory_allocate(max_wchars * memory_size_of(wchar));
     if (!buffer) { return NULL; }
@@ -2020,7 +2021,7 @@ void string_from_utf16_into (const char16 *c16str, u64 c16str_size, String *stri
         return;
     }
 
-    // Worst-case buffer: 3 bytes per UTF-16 code unit
+    // worst-case: 3 bytes per UTF-16 code unit
     u64 max_bytes = c16str_size * 3;
     string->value = malloc(max_bytes);
     if (!string->value) {
@@ -2098,31 +2099,7 @@ void string_to_utf16_into (const String *string, char16 *c16str, u64 c16str_size
     }
 }
 
-// -- utf32 -----------------
-
-String string_from_utf32 (const char32 *c32str, u64 c32str_length) {
-    String s = {0};
-    if (!c32str || c32str_length == 0) return s;
-
-    // worst-case: 4 bytes per UTF-32 codepoint
-    u64 max_bytes = c32str_length * 4;
-    char *buffer = malloc(max_bytes);
-    if (!buffer) return s;
-
-    u64 pos = 0;
-    for (u64 i = 0; i < c32str_length; ++i) {
-        u32 codepoint = c32str[i];
-        // validate codepoint
-        if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
-            codepoint = 0xFFFD; // invalid
-        }
-        pos += utf8_encode_char(codepoint, buffer + pos);
-    }
-
-    s.value = buffer;
-    s.length = pos;
-    return s;
-}
+// -- utf32 conversion --------------------------------------------------------
 
 String *string_from_utf32_alloc (const char32 *c32str, u64 c32str_length) {
     if (!c32str) return NULL;
