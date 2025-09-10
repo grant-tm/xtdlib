@@ -429,61 +429,18 @@ void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_
 typedef struct String String;
 	
 // -- Unicode Constants -----------------------------------------------------------
-/*
-static const u32 UNICODE_REPLACEMENT_CHAR = 0xFFFD;
-
-// UTF-8 masks
-static const u32 UTF8_MASK_1BYTE = 0x7F;     // 0xxxxxxx
-static const u32 UTF8_MASK_2BYTE = 0x7FF;	 // 110xxxxx 10xxxxxx
-static const u32 UTF8_MASK_3BYTE = 0xFFFF;   // 1110xxxx 10xxxxxx 10xxxxxx
-static const u32 UTF8_MASK_4BYTE = 0x10FFFF; // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-
-// UTF-8 prefix values
-static const u32 UTF8_PREFIX_1BYTE = 0x00; // not really used, just cast
-static const u32 UTF8_PREFIX_2BYTE = 0xC0; // 110xxxxx
-static const u32 UTF8_PREFIX_3BYTE = 0xE0; // 1110xxxx
-static const u32 UTF8_PREFIX_4BYTE = 0xF0; // 11110xxx
-static const u32 UTF8_PREFIX_CONT  = 0x80; // 10xxxxxx
-
-// UTF-8 prefix masks
-static const u32 UTF8_MASK_PREFIX_1BYTE = 0x80; // 10000000
-static const u32 UTF8_MASK_PREFIX_2BYTE = 0xE0; // 11100000
-static const u32 UTF8_MASK_PREFIX_3BYTE = 0xF0; // 11110000
-static const u32 UTF8_MASK_PREFIX_4BYTE = 0xF8; // 11111000
-static const u32 UTF8_MASK_PREFIX_CONT  = 0xC0; // 11000000
-
-// UTF-8 continuation bit masks
-static const u32 UTF8_MASK_6BIT = 0x3F;
-static const u32 UTF8_MASK_5BIT = 0x1F;
-static const u32 UTF8_MASK_4BIT = 0x0F;
-static const u32 UTF8_MASK_3BIT = 0x07;
-
-// UTF-16 surrogate ranges
-static const u32 UTF16_HIGH_SURROGATE_START = 0xD800;
-static const u32 UTF16_HIGH_SURROGATE_END   = 0xDBFF;
-static const u32 UTF16_LOW_SURROGATE_START  = 0xDC00;
-static const u32 UTF16_LOW_SURROGATE_END    = 0xDFFF;
-
-// UTF-16 surrogate math
-static const u32 UTF16_BMP_MAX = 0xFFFF;
-static const u32 UTF16_SURROGATE_OFFSET    = 0x10000;
-static const u32 UTF16_HIGH_SURROGATE_MASK = 0x3FF;
-static const u32 UTF16_LOW_SURROGATE_MASK  = 0x3FF;
-static const u32 UTF16_SURROGATE_SHIFT     = 10;
-*/
 
 enum {
-    
-	UNICODE_REPLACEMENT_CHAR = 0xFFFD,
-
-    // UTF-8 masks
+	UNICODE_REPLACEMENT_CHAR = 0xFFFD, // replacement character
+									   //
+    // UTF-8 masks (codepoint ranges)
     UTF8_MASK_1BYTE = 0x7F,      // 0xxxxxxx
     UTF8_MASK_2BYTE = 0x7FF,     // 110xxxxx 10xxxxxx
     UTF8_MASK_3BYTE = 0xFFFF,    // 1110xxxx 10xxxxxx 10xxxxxx
     UTF8_MASK_4BYTE = 0x10FFFF,  // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
 
     // UTF-8 prefix values
-    UTF8_PREFIX_1BYTE = 0x00, // not really used, just cast
+    UTF8_PREFIX_1BYTE = 0x00, // obv not a thing in the spec, just included for clarity
     UTF8_PREFIX_2BYTE = 0xC0, // 110xxxxx
     UTF8_PREFIX_3BYTE = 0xE0, // 1110xxxx
     UTF8_PREFIX_4BYTE = 0xF0, // 11110xxx
@@ -497,23 +454,23 @@ enum {
     UTF8_MASK_PREFIX_CONT  = 0xC0, // 11000000
 
     // UTF-8 continuation bit masks
-    UTF8_MASK_6BIT = 0x3F,
-    UTF8_MASK_5BIT = 0x1F,
-    UTF8_MASK_4BIT = 0x0F,
-    UTF8_MASK_3BIT = 0x07,
+    UTF8_MASK_6BIT = 0x3F, // 00111111 (continuation payload)
+    UTF8_MASK_5BIT = 0x1F, // 00011111 (2-byte leading payload)
+    UTF8_MASK_4BIT = 0x0F, // 00001111 (3-byte leading payload)
+    UTF8_MASK_3BIT = 0x07, // 00000111 (4-byte leading payload)
 
     // UTF-16 surrogate ranges
-    UTF16_HIGH_SURROGATE_START = 0xD800,
-    UTF16_HIGH_SURROGATE_END   = 0xDBFF,
-    UTF16_LOW_SURROGATE_START  = 0xDC00,
-    UTF16_LOW_SURROGATE_END    = 0xDFFF,
+    UTF16_HIGH_SURROGATE_START = 0xD800, // start of high surrogate range
+    UTF16_HIGH_SURROGATE_END   = 0xDBFF, // end of high surrogate range
+    UTF16_LOW_SURROGATE_START  = 0xDC00, // start of low surrogate range
+    UTF16_LOW_SURROGATE_END    = 0xDFFF, // end of low surrogate range
 
     // UTF-16 surrogate math
-    UTF16_BMP_MAX              = 0xFFFF,
-    UTF16_SURROGATE_OFFSET     = 0x10000,
-    UTF16_HIGH_SURROGATE_MASK  = 0x3FF,
-    UTF16_LOW_SURROGATE_MASK   = 0x3FF,
-    UTF16_SURROGATE_SHIFT      = 10
+    UTF16_BMP_MAX              = 0xFFFF,  // last code point in BMP
+    UTF16_SURROGATE_OFFSET     = 0x10000, // offset added when combining surrogate pairs
+    UTF16_HIGH_SURROGATE_MASK  = 0x3FF,   // 00000011 11111111 (10 bits of high surrogate payload)
+    UTF16_LOW_SURROGATE_MASK   = 0x3FF,   // 00000011 11111111 (10 bits of low surrogate payload)
+    UTF16_SURROGATE_SHIFT      = 10       // number of bits to shift high surrogate payload
 };
 
 // -- Iterators ---------------------------------------------------------------
