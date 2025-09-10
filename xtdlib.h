@@ -423,6 +423,128 @@ void array_shift_left(ArrayHeader *header, void *array, u64 item_size, u64 from_
 #define array_clear(a) a.count = 0
 
 //=============================================================================
+// UNICODE / WCHAR ENCODING DECLARATIONS
+//=============================================================================
+
+typedef struct String String;
+	
+// -- Unicode Constants -----------------------------------------------------------
+/*
+static const u32 UNICODE_REPLACEMENT_CHAR = 0xFFFD;
+
+// UTF-8 masks
+static const u32 UTF8_MASK_1BYTE = 0x7F;     // 0xxxxxxx
+static const u32 UTF8_MASK_2BYTE = 0x7FF;	 // 110xxxxx 10xxxxxx
+static const u32 UTF8_MASK_3BYTE = 0xFFFF;   // 1110xxxx 10xxxxxx 10xxxxxx
+static const u32 UTF8_MASK_4BYTE = 0x10FFFF; // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+
+// UTF-8 prefix values
+static const u32 UTF8_PREFIX_1BYTE = 0x00; // not really used, just cast
+static const u32 UTF8_PREFIX_2BYTE = 0xC0; // 110xxxxx
+static const u32 UTF8_PREFIX_3BYTE = 0xE0; // 1110xxxx
+static const u32 UTF8_PREFIX_4BYTE = 0xF0; // 11110xxx
+static const u32 UTF8_PREFIX_CONT  = 0x80; // 10xxxxxx
+
+// UTF-8 prefix masks
+static const u32 UTF8_MASK_PREFIX_1BYTE = 0x80; // 10000000
+static const u32 UTF8_MASK_PREFIX_2BYTE = 0xE0; // 11100000
+static const u32 UTF8_MASK_PREFIX_3BYTE = 0xF0; // 11110000
+static const u32 UTF8_MASK_PREFIX_4BYTE = 0xF8; // 11111000
+static const u32 UTF8_MASK_PREFIX_CONT  = 0xC0; // 11000000
+
+// UTF-8 continuation bit masks
+static const u32 UTF8_MASK_6BIT = 0x3F;
+static const u32 UTF8_MASK_5BIT = 0x1F;
+static const u32 UTF8_MASK_4BIT = 0x0F;
+static const u32 UTF8_MASK_3BIT = 0x07;
+
+// UTF-16 surrogate ranges
+static const u32 UTF16_HIGH_SURROGATE_START = 0xD800;
+static const u32 UTF16_HIGH_SURROGATE_END   = 0xDBFF;
+static const u32 UTF16_LOW_SURROGATE_START  = 0xDC00;
+static const u32 UTF16_LOW_SURROGATE_END    = 0xDFFF;
+
+// UTF-16 surrogate math
+static const u32 UTF16_BMP_MAX = 0xFFFF;
+static const u32 UTF16_SURROGATE_OFFSET    = 0x10000;
+static const u32 UTF16_HIGH_SURROGATE_MASK = 0x3FF;
+static const u32 UTF16_LOW_SURROGATE_MASK  = 0x3FF;
+static const u32 UTF16_SURROGATE_SHIFT     = 10;
+*/
+
+enum {
+    
+	UNICODE_REPLACEMENT_CHAR = 0xFFFD,
+
+    // UTF-8 masks
+    UTF8_MASK_1BYTE = 0x7F,      // 0xxxxxxx
+    UTF8_MASK_2BYTE = 0x7FF,     // 110xxxxx 10xxxxxx
+    UTF8_MASK_3BYTE = 0xFFFF,    // 1110xxxx 10xxxxxx 10xxxxxx
+    UTF8_MASK_4BYTE = 0x10FFFF,  // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+
+    // UTF-8 prefix values
+    UTF8_PREFIX_1BYTE = 0x00, // not really used, just cast
+    UTF8_PREFIX_2BYTE = 0xC0, // 110xxxxx
+    UTF8_PREFIX_3BYTE = 0xE0, // 1110xxxx
+    UTF8_PREFIX_4BYTE = 0xF0, // 11110xxx
+    UTF8_PREFIX_CONT  = 0x80, // 10xxxxxx
+
+    // UTF-8 prefix masks
+    UTF8_MASK_PREFIX_1BYTE = 0x80, // 10000000
+    UTF8_MASK_PREFIX_2BYTE = 0xE0, // 11100000
+    UTF8_MASK_PREFIX_3BYTE = 0xF0, // 11110000
+    UTF8_MASK_PREFIX_4BYTE = 0xF8, // 11111000
+    UTF8_MASK_PREFIX_CONT  = 0xC0, // 11000000
+
+    // UTF-8 continuation bit masks
+    UTF8_MASK_6BIT = 0x3F,
+    UTF8_MASK_5BIT = 0x1F,
+    UTF8_MASK_4BIT = 0x0F,
+    UTF8_MASK_3BIT = 0x07,
+
+    // UTF-16 surrogate ranges
+    UTF16_HIGH_SURROGATE_START = 0xD800,
+    UTF16_HIGH_SURROGATE_END   = 0xDBFF,
+    UTF16_LOW_SURROGATE_START  = 0xDC00,
+    UTF16_LOW_SURROGATE_END    = 0xDFFF,
+
+    // UTF-16 surrogate math
+    UTF16_BMP_MAX              = 0xFFFF,
+    UTF16_SURROGATE_OFFSET     = 0x10000,
+    UTF16_HIGH_SURROGATE_MASK  = 0x3FF,
+    UTF16_LOW_SURROGATE_MASK   = 0x3FF,
+    UTF16_SURROGATE_SHIFT      = 10
+};
+
+// -- Iterators ---------------------------------------------------------------
+
+typedef struct {
+    u32 codepoint; // Unicode scalar value
+    u8  size;      // number of bytes in this codepoint
+    u64 index;     // byte offset in the array
+} UTF8Iterator;
+
+inline UTF8Iterator utf8_next (const String *s, u64 *i);
+inline UTF8Iterator utf8_prev (const String *s, u64 *i);
+
+typedef struct {
+    u32 codepoint;	// Unicode scalar value
+    u64 index; 		// element offset in the array
+} WCharIterator;
+
+inline WCharIterator wchar_next(const wchar_t *wstr, u64 length, u64 *i);
+inline WCharIterator wchar_prev(const wchar_t *wstr, u64 *i);
+
+// -- Encoding ----------------------------------------------------------------
+
+u64 utf8_encode_char  (u32 codepoint, char *buffer); 
+u64 utf16_encode_char (u32 codepoint, char16 *buffer);
+
+void fill_wchar_buffer_from_string (wchar *buffer, u64 *buffer_length, const String *string); 
+void fill_utf8_buffer_from_wstr (char *buffer, u64 *buffer_length, const wchar *wstr, u64 wstr_size);
+void fill_utf8_buffer_from_utf16 (char *buffer, u64 *buffer_size, const char16 *c16str, u64 c16str_size);
+
+//=============================================================================
 // STRING DECLARATIONS 
 //=============================================================================
 
@@ -585,259 +707,6 @@ SE_Result string_editor_trim (StringEditor *editor, const String *chars_to_trim)
 // -- upper / lower ---------
 void string_editor_to_lower (StringEditor *editor, u64 start, u64 end);
 void string_editor_to_upper (StringEditor *editor, u64 start, u64 end);
-
-// -- encoding helpers --------------------------
-
-// UTF-8 masks
-static const u32 UTF8_MASK_1BYTE = 0x7F;     // 0xxxxxxx
-static const u32 UTF8_MASK_2BYTE = 0x7FF;	// 110xxxxx 10xxxxxx
-static const u32 UTF8_MASK_3BYTE = 0xFFFF;   // 1110xxxx 10xxxxxx 10xxxxxx
-static const u32 UTF8_MASK_4BYTE = 0x10FFFF; // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-
-// UTF-8 Prefixes
-static const u32 UTF8_PREFIX_1BYTE = 0x00; // not really used, just cast
-static const u32 UTF8_PREFIX_2BYTE = 0xC0; // 110xxxxx
-static const u32 UTF8_PREFIX_3BYTE = 0xE0; // 1110xxxx
-static const u32 UTF8_PREFIX_4BYTE = 0xF0; // 11110xxx
-static const u32 UTF8_PREFIX_CONT  = 0x80; // 10xxxxxx
-
-// UTF-8 Continuation bit masks
-static const u32 UTF8_MASK_6BIT = 0x3F;
-static const u32 UTF8_MASK_5BIT = 0x1F;
-static const u32 UTF8_MASK_4BIT = 0x0F;
-static const u32 UTF8_MASK_3BIT = 0x07;
-
-// UTF-16 surrogate ranges
-static const u32 UTF16_HIGH_SURROGATE_START = 0xD800;
-static const u32 UTF16_HIGH_SURROGATE_END   = 0xDBFF;
-static const u32 UTF16_LOW_SURROGATE_START  = 0xDC00;
-static const u32 UTF16_LOW_SURROGATE_END    = 0xDFFF;
-
-// UTF-16 surrogate math
-static const u32 UTF16_SURROGATE_OFFSET    = 0x10000;
-static const u32 UTF16_HIGH_SURROGATE_MASK = 0x3FF;
-static const u32 UTF16_LOW_SURROGATE_MASK  = 0x3FF;
-static const u32 UTF16_SURROGATE_SHIFT     = 10;
-
-static u64 utf8_encode_char(u32 codepoint, char *buffer) {
-    if (codepoint <= 0x7F) {
-        buffer[0] = (char) codepoint;
-        return 1;
-	} else if (codepoint <= 0x7FF) {
-        buffer[0] = 0xC0 | (codepoint >> 6);
-        buffer[1] = 0x80 | (codepoint & 0x3F);
-        return 2;
-    } else if (codepoint <= 0xFFFF) {
-        buffer[0] = 0xE0 | (codepoint >> 12);
-        buffer[1] = 0x80 | ((codepoint >> 6) & 0x3F);
-        buffer[2] = 0x80 | (codepoint & 0x3F);
-        return 3;
-    } else {
-        buffer[0] = 0xF0 | (codepoint >> 18);
-        buffer[1] = 0x80 | ((codepoint >> 12) & 0x3F);
-        buffer[2] = 0x80 | ((codepoint >> 6) & 0x3F);
-        buffer[3] = 0x80 | (codepoint & 0x3F);
-        return 4;
-    }
-}
-
-static u64 utf16_encode_char(u32 codepoint, char16 *buffer) {
-    if (codepoint <= 0xFFFF) {
-        buffer[0] = (char16) codepoint;
-        return 1;
-    } else {
-        // encode surrogate pair
-        codepoint -= 0x10000;
-        buffer[0] = 0xD800 | ((codepoint >> 10) & 0x3FF);
-        buffer[1] = 0xDC00 | (codepoint & 0x3FF);
-        return 2;
-    }
-}
-
-// -- UTF8 Iterator Type ------------------------------------------------------
-
-typedef struct {
-    u32 codepoint;   // Unicode scalar value
-    u8  size;        // number of bytes in this codepoint
-    u64 index;       // byte offset into the String
-} UTF8Iterator;
-
-// Decode next UTF-8 codepoint starting at s->value[*i].
-// Advances *i by the codepoint length in bytes.
-// Returns 0xFFFD (replacement char) on invalid UTF-8.
-static inline UTF8Iterator utf8_next(const String *s, u64 *i) {
-    UTF8Iterator it = { .codepoint = 0, .index = *i, .size = 0 };
-
-    if (*i >= s->length) return it;  // end
-
-    const byte *b = (const byte *)s->value + *i;
-    byte b0 = b[0];
-
-    if (b0 < 0x80) {
-        // 1-byte ASCII
-        it.codepoint = b0;
-        it.size = 1;
-    } else if ((b0 >> 5) == 0x6 && *i + 1 < s->length) {
-        // 2-byte
-        byte b1 = b[1];
-        if ((b1 & 0xC0) == 0x80) {
-            it.codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-            it.size = 2;
-        } else it.codepoint = 0xFFFD, it.size = 1;
-    } else if ((b0 >> 4) == 0xE && *i + 2 < s->length) {
-        // 3-byte
-        byte b1 = b[1], b2 = b[2];
-        if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80) {
-            it.codepoint = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-            it.size = 3;
-        } else it.codepoint = 0xFFFD, it.size = 1;
-    } else if ((b0 >> 3) == 0x1E && *i + 3 < s->length) {
-        // 4-byte
-        byte b1 = b[1], b2 = b[2], b3 = b[3];
-        if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80) {
-            it.codepoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-            it.size = 4;
-        } else it.codepoint = 0xFFFD, it.size = 1;
-    } else {
-        it.codepoint = 0xFFFD;
-        it.size = 1;
-    }
-
-    *i += it.size;
-    return it;
-}
-
-// Decode previous UTF-8 codepoint starting at s->value[*i].
-// Moves *i backwards to the start of the previous codepoint.
-// Returns 0xFFFD on invalid UTF-8, 0 if at start.
-static inline UTF8Iterator utf8_prev(const String *s, u64 *i) {
-    UTF8Iterator it = { .codepoint = 0xFFFD, .index = *i, .size = 1 };
-
-    if (*i == 0) {
-        it.codepoint = 0;
-        it.size = 0;
-        return it;
-    }
-
-    u64 pos = *i - 1;
-    const byte *bytes = (const byte *) s->value;
-
-    // Move backwards until finding a non-continuation byte
-    u8 continuation_bytes = 0;
-    while (pos > 0 && (bytes[pos] & 0xC0) == 0x80) {
-        pos--;
-        continuation_bytes++;
-        if (continuation_bytes > 3) {
-			break; // invalid UTF-8 max 4 bytes
-    	}
-	}
-
-    byte b0 = bytes[pos];
-
-    // Determine length from leading byte
-    if ((b0 & 0x80) == 0) {       // 1-byte ASCII
-        it.size = 1;
-        it.codepoint = b0;
-    }
-	// 2-byte sequence
-	else if ((b0 & 0xE0) == 0xC0 && continuation_bytes == 1) {
-        it.size = 2;
-        if (pos + 1 < s->length) {
-            byte b1 = bytes[pos + 1];
-            if ((b1 & 0xC0) == 0x80)
-                it.codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-        }
-    }
-	// 3-byte sequence
-	else if ((b0 & 0xF0) == 0xE0 && continuation_bytes == 2) {
-        it.size = 3;
-        if (pos + 2 < s->length) {
-            byte b1 = bytes[pos + 1];
-            byte b2 = bytes[pos + 2];
-            if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80)
-                it.codepoint = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-        }
-    }
-	// 4-byte sequence
-	else if ((b0 & 0xF8) == 0xF0 && continuation_bytes == 3) {
-        it.size = 4;
-        if (pos + 3 < s->length) {
-            byte b1 = bytes[pos + 1];
-            byte b2 = bytes[pos + 2];
-            byte b3 = bytes[pos + 3];
-            if ((b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80)
-                it.codepoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-        }
-    }
-
-    it.index = pos;
-    *i = pos;
-    return it;
-}
-
-// -- WChar Iterator ----------------------------------------------------------
-
-typedef struct {
-    u32 codepoint;
-    u64 index; // element offset in the wchar array
-} WCharIterator;
-
-static inline WCharIterator wchar_next(const wchar_t *wstr, u64 length, u64 *i) {
-    WCharIterator it = { .codepoint = 0xFFFD, .index = *i };
-    if (*i >= length) {
-        it.codepoint = 0; // end
-        return it;
-    }
-
-    u32 cp = (u32)wstr[*i]; // read codepoint
-#ifdef _WIN32
-    // Handle surrogate pairs for UTF-16
-    if (cp >= 0xD800 && cp <= 0xDBFF && *i + 1 < length) {
-        u32 low = wstr[*i + 1];
-        if (low >= 0xDC00 && low <= 0xDFFF) {
-            cp = 0x10000 + (((cp - 0xD800) << 10) | (low - 0xDC00));
-            it.index = *i;
-            *i += 2;
-            it.codepoint = cp;
-            return it;
-        }
-    }
-#endif
-    it.codepoint = cp;
-    it.index = *i;
-    (*i)++;
-    return it;
-}
-
-// Move backward
-static inline WCharIterator wchar_prev(const wchar_t *wstr, u64 *i) {
-    WCharIterator it = { .codepoint = 0xFFFD, .index = *i };
-    if (*i == 0) {
-        it.codepoint = 0; // start reached
-        return it;
-    }
-
-    (*i)--; // move back one element
-    u32 cp = (u32)wstr[*i];
-
-#ifdef _WIN32
-    // Check if this is a low surrogate (0xDC00–0xDFFF)
-    if (cp >= 0xDC00 && cp <= 0xDFFF && *i > 0) {
-        u32 high = wstr[*i - 1];
-        if (high >= 0xD800 && high <= 0xDBFF) {
-            cp = 0x10000 + (((high - 0xD800) << 10) | (cp - 0xDC00));
-            it.index = *i - 1;
-            *i -= 1;
-            it.codepoint = cp;
-            return it;
-        }
-    }
-#endif
-
-    it.codepoint = cp;
-    it.index = *i;
-    return it;
-}
 
 //=============================================================================
 // MATH DECLARATIONS
@@ -1549,6 +1418,331 @@ struct MapHashEntry { u64 hash; u64 index; };
 */
 
 //=============================================================================
+// UNICODE / WCHAR ENCODING IMPLEMENTATION
+//=============================================================================
+
+// -- Iterators ---------------------------------------------------------------
+
+// Decode next UTF-8 codepoint starting at s->value[*i].
+// Advances *i by the codepoint length in bytes.
+// Returns 0xFFFD (replacement char) on invalid UTF-8.
+inline UTF8Iterator utf8_next(const String *s, u64 *i) {
+    UTF8Iterator it = { .codepoint = 0, .index = *i, .size = 0 };
+
+    if (*i >= s->length) return it;  // end
+
+    const byte *b = (const byte *)s->value + *i;
+    byte b0 = b[0];
+
+    if ((b0 & UTF8_MASK_PREFIX_1BYTE) == UTF8_PREFIX_1BYTE) {
+        // 1-byte ASCII
+        it.codepoint = b0;
+        it.size = 1;
+    }
+    else if ((b0 & UTF8_MASK_PREFIX_2BYTE) == UTF8_PREFIX_2BYTE && *i + 1 < s->length) {
+        // 2-byte
+        byte b1 = b[1];
+        if ((b1 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT) {
+            it.codepoint = ((b0 & UTF8_MASK_5BIT) << 6) |
+                           (b1 & UTF8_MASK_6BIT);
+            it.size = 2;
+        } else {
+            it.codepoint = UNICODE_REPLACEMENT_CHAR;
+            it.size = 1;
+        }
+    }
+    else if ((b0 & UTF8_MASK_PREFIX_3BYTE) == UTF8_PREFIX_3BYTE && *i + 2 < s->length) {
+        // 3-byte
+        byte b1 = b[1], b2 = b[2];
+        if ((b1 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT &&
+            (b2 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT) {
+            it.codepoint = ((b0 & UTF8_MASK_4BIT) << 12) |
+                           ((b1 & UTF8_MASK_6BIT) << 6) |
+                           (b2 & UTF8_MASK_6BIT);
+            it.size = 3;
+        } else {
+            it.codepoint = UNICODE_REPLACEMENT_CHAR;
+            it.size = 1;
+        }
+    }
+    else if ((b0 & UTF8_MASK_PREFIX_4BYTE) == UTF8_PREFIX_4BYTE && *i + 3 < s->length) {
+        // 4-byte
+        byte b1 = b[1], b2 = b[2], b3 = b[3];
+        if ((b1 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT &&
+            (b2 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT &&
+            (b3 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT) {
+            it.codepoint = ((b0 & UTF8_MASK_3BIT) << 18) |
+                           ((b1 & UTF8_MASK_6BIT) << 12) |
+                           ((b2 & UTF8_MASK_6BIT) << 6) |
+                           (b3 & UTF8_MASK_6BIT);
+            it.size = 4;
+        } else {
+            it.codepoint = UNICODE_REPLACEMENT_CHAR;
+            it.size = 1;
+        }
+    }
+    else {
+        it.codepoint = UNICODE_REPLACEMENT_CHAR;
+        it.size = 1;
+    }
+
+    *i += it.size;
+    return it;
+}
+
+// Decode previous UTF-8 codepoint starting at s->value[*i].
+// Moves *i backwards to the start of the previous codepoint.
+// Returns 0xFFFD on invalid UTF-8, 0 if at start.
+inline UTF8Iterator utf8_prev(const String *s, u64 *i) {
+    
+	UTF8Iterator it = { .codepoint = UNICODE_REPLACEMENT_CHAR, .index = *i, .size = 1 };
+
+    if (*i == 0) {
+        it.codepoint = 0;
+        it.size = 0;
+        return it;
+    }
+
+    u64 pos = *i - 1;
+    const byte *bytes = (const byte *) s->value;
+
+    // Move backwards until finding a non-continuation byte
+    u8 continuation_bytes = 0;
+    while (pos > 0 && (bytes[pos] & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT) {
+        pos--;
+        continuation_bytes++;
+        if (continuation_bytes > 3) {
+            break; // invalid UTF-8 max 4 bytes
+        }
+    }
+
+    byte b0 = bytes[pos];
+
+    // Determine length from leading byte
+    if ((b0 & UTF8_MASK_PREFIX_1BYTE) == UTF8_PREFIX_1BYTE) { // 1-byte ASCII
+        it.size = 1;
+        it.codepoint = b0;
+    }
+    // 2-byte sequence
+    else if ((b0 & UTF8_MASK_PREFIX_2BYTE) == UTF8_PREFIX_2BYTE && continuation_bytes == 1) {
+        it.size = 2;
+        if (pos + 1 < s->length) {
+            byte b1 = bytes[pos + 1];
+            if ((b1 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT)
+                it.codepoint = ((b0 & UTF8_MASK_5BIT) << 6) | (b1 & UTF8_MASK_6BIT);
+        }
+    }
+    // 3-byte sequence
+    else if ((b0 & UTF8_MASK_PREFIX_3BYTE) == UTF8_PREFIX_3BYTE && continuation_bytes == 2) {
+        it.size = 3;
+        if (pos + 2 < s->length) {
+            byte b1 = bytes[pos + 1];
+            byte b2 = bytes[pos + 2];
+            if ((b1 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT &&
+                (b2 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT)
+                it.codepoint = ((b0 & UTF8_MASK_4BIT) << 12) | ((b1 & UTF8_MASK_6BIT) << 6) | (b2 & UTF8_MASK_6BIT);
+        }
+    }
+    // 4-byte sequence
+    else if ((b0 & UTF8_MASK_PREFIX_4BYTE) == UTF8_PREFIX_4BYTE && continuation_bytes == 3) {
+        it.size = 4;
+        if (pos + 3 < s->length) {
+            byte b1 = bytes[pos + 1];
+            byte b2 = bytes[pos + 2];
+            byte b3 = bytes[pos + 3];
+            if ((b1 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT &&
+                (b2 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT &&
+                (b3 & UTF8_MASK_PREFIX_CONT) == UTF8_PREFIX_CONT)
+                it.codepoint = ((b0 & UTF8_MASK_3BIT) << 18) | ((b1 & UTF8_MASK_6BIT) << 12) |
+                               ((b2 & UTF8_MASK_6BIT) << 6)  | (b3 & UTF8_MASK_6BIT);
+        }
+    }
+
+    it.index = pos;
+    *i = pos;
+    return it;
+}
+
+inline WCharIterator wchar_next(const wchar_t *wstr, u64 length, u64 *i) {
+    WCharIterator it = { .codepoint = UNICODE_REPLACEMENT_CHAR, .index = *i };
+    if (*i >= length) {
+        it.codepoint = 0; 
+        return it;
+    }
+
+    u32 cp = (u32)wstr[*i]; 
+
+	#ifdef _WIN32 // Handle surrogate pairs for UTF-16
+		if (cp >= UTF16_HIGH_SURROGATE_START && cp <= UTF16_HIGH_SURROGATE_END && *i + 1 < length) {
+			u32 low = wstr[*i + 1];
+			if (low >= UTF16_LOW_SURROGATE_START && low <= UTF16_LOW_SURROGATE_END) {
+				cp = UTF16_SURROGATE_OFFSET +
+					 (((cp - UTF16_HIGH_SURROGATE_START) << UTF16_SURROGATE_SHIFT) | (low - UTF16_LOW_SURROGATE_START));
+				it.index = *i;
+				*i += 2;
+				it.codepoint = cp;
+				return it;
+			}
+		}
+	#endif
+    
+	it.codepoint = cp;
+    it.index = *i;
+    (*i)++;
+    return it;
+}
+
+inline WCharIterator wchar_prev(const wchar_t *wstr, u64 *i) {
+    WCharIterator it = { .codepoint = UNICODE_REPLACEMENT_CHAR, .index = *i };
+    if (*i == 0) {
+        it.codepoint = 0; 
+        return it;
+    }
+
+    (*i)--; 
+    u32 cp = (u32)wstr[*i];
+
+	#ifdef _WIN32 // Check if this is a low surrogate
+		if (cp >= UTF16_LOW_SURROGATE_START && cp <= UTF16_LOW_SURROGATE_END && *i > 0) {
+			u32 high = wstr[*i - 1];
+			if (high >= UTF16_HIGH_SURROGATE_START && high <= UTF16_HIGH_SURROGATE_END) {
+				cp = UTF16_SURROGATE_OFFSET +
+					 (((high - UTF16_HIGH_SURROGATE_START) << UTF16_SURROGATE_SHIFT) | (cp - UTF16_LOW_SURROGATE_START));
+				it.index = *i - 1;
+				*i -= 1;
+				it.codepoint = cp;
+				return it;
+			}
+		}
+	#endif
+
+    it.codepoint = cp;
+    it.index = *i;
+    return it;
+}
+
+// -- Encoding ----------------------------------------------------------------
+
+// UTF-8 encode a single codepoint into buffer.
+// Returns the number of bytes written.
+u64 utf8_encode_char(u32 codepoint, char *buffer) {
+    if (codepoint <= UTF8_MASK_1BYTE) {
+        buffer[0] = (char) codepoint;
+        return 1;
+    } 
+    else if (codepoint <= UTF8_MASK_2BYTE) {
+        buffer[0] = UTF8_PREFIX_2BYTE | ((codepoint >> 6) & UTF8_MASK_5BIT);
+        buffer[1] = UTF8_PREFIX_CONT  | (codepoint & UTF8_MASK_6BIT);
+        return 2;
+    } 
+    else if (codepoint <= UTF8_MASK_3BYTE) {
+        buffer[0] = UTF8_PREFIX_3BYTE | ((codepoint >> 12) & UTF8_MASK_4BIT);
+        buffer[1] = UTF8_PREFIX_CONT  | ((codepoint >> 6) & UTF8_MASK_6BIT);
+        buffer[2] = UTF8_PREFIX_CONT  | (codepoint & UTF8_MASK_6BIT);
+        return 3;
+    } 
+    else {
+        buffer[0] = UTF8_PREFIX_4BYTE | ((codepoint >> 18) & UTF8_MASK_3BIT);
+        buffer[1] = UTF8_PREFIX_CONT  | ((codepoint >> 12) & UTF8_MASK_6BIT);
+        buffer[2] = UTF8_PREFIX_CONT  | ((codepoint >> 6)  & UTF8_MASK_6BIT);
+        buffer[3] = UTF8_PREFIX_CONT  | (codepoint & UTF8_MASK_6BIT);
+        return 4;
+    }
+}
+
+// UTF-16 encode a single codepoint into buffer.
+// Returns the number of code units written.
+u64 utf16_encode_char(u32 codepoint, char16 *buffer) {
+    if (codepoint <= UTF16_BMP_MAX) {
+        buffer[0] = (char16) codepoint;
+        return 1;
+    } 
+    else {
+        // Encode surrogate pair
+        codepoint -= UTF16_SURROGATE_OFFSET;
+        buffer[0] = UTF16_HIGH_SURROGATE_START | ((codepoint >> UTF16_SURROGATE_SHIFT) & UTF16_HIGH_SURROGATE_MASK);
+        buffer[1] = UTF16_LOW_SURROGATE_START  | (codepoint & UTF16_LOW_SURROGATE_MASK);
+        return 2;
+    }
+}
+
+void fill_wchar_buffer_from_string (wchar *buffer, u64 *buffer_length, const String *string) {
+    u64 i = 0;
+    UTF8Iterator it; 
+    while ((it = utf8_next(string, &i)).codepoint != 0) {
+        u32 code_point = it.codepoint;
+
+        #ifdef _WIN32 // 16-bit wchar
+            // UTF-16 surrogate pair handling
+            if (code_point > 0xFFFF) {
+                code_point -= UTF16_SURROGATE_OFFSET;
+                buffer[(*buffer_length)++] = UTF16_HIGH_SURROGATE_START | ((code_point >> UTF16_SURROGATE_SHIFT) & UTF16_HIGH_SURROGATE_MASK);
+                buffer[(*buffer_length)++] = UTF16_LOW_SURROGATE_START | (code_point & UTF16_LOW_SURROGATE_MASK);
+            } else {
+                buffer[(*buffer_length)++] = (wchar) code_point;
+            }
+        #else // 32-bit wchar
+            buffer[(*buffer_length)++] = (wchar) code_point; 
+        #endif
+    }
+}
+
+void fill_utf8_buffer_from_wstr (char *buffer, u64 *buffer_length, const wchar *wstr, u64 wstr_size) {
+	
+	u64 i = 0;
+    WCharIterator it;
+
+    while ((it = wchar_next(wstr, wstr_size, &i)).codepoint != 0) {
+        
+		u32 code_point = it.codepoint;
+
+		if (code_point <= UTF8_MASK_1BYTE) {
+			buffer[(*buffer_length)++] = (char) code_point;
+		} 
+		else if (code_point <= UTF8_MASK_2BYTE) {
+			buffer[(*buffer_length)++] = UTF8_PREFIX_2BYTE | ((code_point >> 6) & UTF8_MASK_5BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
+		} 
+		else if (code_point <= UTF8_MASK_3BYTE) {
+			buffer[(*buffer_length)++] = UTF8_PREFIX_3BYTE | ((code_point >> 12) & UTF8_MASK_4BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 6)  & UTF8_MASK_6BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
+		} 
+		else {
+			buffer[(*buffer_length)++] = UTF8_PREFIX_4BYTE | ((code_point >> 18) & UTF8_MASK_3BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 12) & UTF8_MASK_6BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 6)  & UTF8_MASK_6BIT);
+			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
+		}
+    }
+}
+
+void fill_utf8_buffer_from_utf16 (char *buffer, u64 *buffer_size, const char16 *c16str, u64 c16str_size) {
+    for (u64 i = 0; i < c16str_size; ++i) {
+        u32 codepoint;
+        char16 cu = c16str[i];
+
+        if (cu >= UTF16_HIGH_SURROGATE_START && cu <= UTF16_HIGH_SURROGATE_END && i + 1 < c16str_size) {
+            // high surrogate
+            char16 cu2 = c16str[i + 1];
+            if (cu2 >= UTF16_LOW_SURROGATE_START && cu2 <= UTF16_LOW_SURROGATE_END) {
+                codepoint = UTF16_SURROGATE_OFFSET +
+                            (((cu - UTF16_HIGH_SURROGATE_START) << UTF16_SURROGATE_SHIFT) | (cu2 - UTF16_LOW_SURROGATE_START));
+                i++;
+            } else {
+                codepoint = UNICODE_REPLACEMENT_CHAR; // invalid surrogate pair
+            }
+        } else if (cu >= UTF16_LOW_SURROGATE_START && cu <= UTF16_LOW_SURROGATE_END) {
+            codepoint = UNICODE_REPLACEMENT_CHAR; // unexpected low surrogate
+        } else {
+            codepoint = cu;
+        }
+
+        (*buffer_size) += utf8_encode_char(codepoint, buffer + (*buffer_size));
+    }
+}
+
+//=============================================================================
 // STRING IMPLEMENTATION
 //=============================================================================
 
@@ -1697,58 +1891,7 @@ void string_to_cstr_into (const String *string, char *cstr, u64 cstr_size) {
     cstr[copy_len] = '\0';
 }
 
-// -- wstr ------------------
-
-void fill_utf8_buffer_from_wstr (char *buffer, u64 *buffer_length, const wchar *wstr, u64 wstr_size) {
-	
-	u64 i = 0;
-    WCharIterator it;
-
-    while ((it = wchar_next(wstr, wstr_size, &i)).codepoint != 0) {
-        
-		u32 code_point = it.codepoint;
-
-		if (code_point <= UTF8_MASK_1BYTE) {
-			buffer[(*buffer_length)++] = (char) code_point;
-		} 
-		else if (code_point <= UTF8_MASK_2BYTE) {
-			buffer[(*buffer_length)++] = UTF8_PREFIX_2BYTE | ((code_point >> 6) & UTF8_MASK_5BIT);
-			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
-		} 
-		else if (code_point <= UTF8_MASK_3BYTE) {
-			buffer[(*buffer_length)++] = UTF8_PREFIX_3BYTE | ((code_point >> 12) & UTF8_MASK_4BIT);
-			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 6)  & UTF8_MASK_6BIT);
-			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
-		} 
-		else {
-			buffer[(*buffer_length)++] = UTF8_PREFIX_4BYTE | ((code_point >> 18) & UTF8_MASK_3BIT);
-			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 12) & UTF8_MASK_6BIT);
-			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | ((code_point >> 6)  & UTF8_MASK_6BIT);
-			buffer[(*buffer_length)++] = UTF8_PREFIX_CONT  | (code_point & UTF8_MASK_6BIT);
-		}
-    }
-}
-
-void fill_wchar_buffer_from_string (wchar *buffer, u64 *buffer_length, const String *string) {
-    u64 i = 0;
-    UTF8Iterator it; 
-    while ((it = utf8_next(string, &i)).codepoint != 0) {
-        u32 code_point = it.codepoint;
-
-        #ifdef _WIN32 // 16-bit wchar
-            // UTF-16 surrogate pair handling
-            if (code_point > 0xFFFF) {
-                code_point -= UTF16_SURROGATE_OFFSET;
-                buffer[(*buffer_length)++] = UTF16_HIGH_SURROGATE_START | ((code_point >> UTF16_SURROGATE_SHIFT) & UTF16_HIGH_SURROGATE_MASK);
-                buffer[(*buffer_length)++] = UTF16_LOW_SURROGATE_START | (code_point & UTF16_LOW_SURROGATE_MASK);
-            } else {
-                buffer[(*buffer_length)++] = (wchar) code_point;
-            }
-        #else // 32-bit wchar
-            buffer[(*buffer_length)++] = (wchar) code_point; 
-        #endif
-    }
-}
+// -- wchar conversion --------------------------------------------------------
 
 String string_from_wstr (const wchar *wstr, u64 wstr_size) {
     if (!wstr) {
@@ -1833,97 +1976,40 @@ void string_to_wstr_into (const String *string, wchar *wstr, u64 wstr_size) {
 	fill_wchar_buffer_from_string(wstr, &buffer_length, string);
 }
 
-// -- utf16 -----------------
-
-String string_from_utf16 (const char16 *c16str, u64 c16str_size) {
-    String s = {0};
-    if (!c16str || c16str_size == 0) { return s; }
-
-    // worst-case UTF-8 size: 3 bytes per UTF-16 code unit, plus 1 for safety
-    u64 max_bytes = c16str_size * 3;
-    char *buffer = malloc(max_bytes);
-    if (!buffer) return s;
-
-    u64 pos = 0;
-    for (u64 i = 0; i < c16str_size; ++i) {
-        u32 codepoint;
-        char16 cu = c16str[i];
-
-        if (cu >= 0xD800 && cu <= 0xDBFF && i + 1 < c16str_size) {
-            // high surrogate
-            char16 cu2 = c16str[i+1];
-            if (cu2 >= 0xDC00 && cu2 <= 0xDFFF) {
-                codepoint = ((cu - 0xD800) << 10) + (cu2 - 0xDC00) + 0x10000;
-                i++;
-            } else {
-                codepoint = 0xFFFD; // invalid surrogate pair
-            }
-        } else if (cu >= 0xDC00 && cu <= 0xDFFF) {
-            codepoint = 0xFFFD; // unexpected low surrogate
-        } else {
-            codepoint = cu;
-        }
-
-        pos += utf8_encode_char(codepoint, buffer + pos);
-    }
-
-    s.value = buffer;
-    s.length = pos;
-    return s;
-}
+// -- utf16 conversion --------------------------------------------------------
 
 String *string_from_utf16_alloc (const char16 *c16str, u64 c16str_size) {
     if (!c16str) { return NULL; }
 
-    String *s = malloc(sizeof(String));
-    if (!s) { return NULL; }
+    String *new_string = memory_allocate(memory_size_of(String));
+    if (!new_string) { return NULL; }
 
     if (c16str_size == 0) {
-        s->length = 0;
-        s->value = NULL;
-        return s;
+        new_string->length = 0;
+        new_string->value = NULL;
+        return new_string;
     }
 
-    // Convert UTF-16 into a newly allocated buffer directly
     u64 max_bytes = c16str_size * 3;
-    s->value = malloc(max_bytes);
-    if (!s->value) {
-        free(s);
+    
+	new_string->value = memory_allocate(max_bytes);
+    if (!new_string->value) {
+        memory_free(new_string);
         return NULL;
     }
+	u64 buffer_size = 0;
 
-    u64 pos = 0;
-    for (u64 i = 0; i < c16str_size; ++i) {
-        u32 codepoint;
-        char16 cu = c16str[i];
+   	fill_utf8_buffer_from_utf16(new_string->value, &buffer_size, c16str, c16str_size); 
 
-        if (cu >= 0xD800 && cu <= 0xDBFF && i + 1 < c16str_size) {
-            char16 cu2 = c16str[i+1];
-            if (cu2 >= 0xDC00 && cu2 <= 0xDFFF) {
-                codepoint = ((cu - 0xD800) << 10) + (cu2 - 0xDC00) + 0x10000;
-                i++;
-            } else {
-                codepoint = 0xFFFD;
-            }
-        } else if (cu >= 0xDC00 && cu <= 0xDFFF) {
-            codepoint = 0xFFFD;
-        } else {
-            codepoint = cu;
-        }
-
-        pos += utf8_encode_char(codepoint, s->value + pos);
-    }
-
-    s->length = pos;
-    return s;
+    new_string->length = buffer_size;
+    return new_string;
 }
 
 void string_from_utf16_into (const char16 *c16str, u64 c16str_size, String *string) {
     if (!string) { return; }
 
-    // Free existing buffer if present
     if (string->value) {
-        free(string->value);
+        memory_free(string->value);
         string->value = NULL;
         string->length = 0;
     }
